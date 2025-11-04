@@ -91,8 +91,13 @@
       transition: transform 120ms ease, box-shadow 120ms ease;
       box-shadow: 0 6px 20px rgba(34,197,94,0.25);
     }
-    .btn:hover { transform: translateY(-1px); }
-    .btn:active { transform: translateY(0); }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:active:not(:disabled) { transform: translateY(0); }
+    .btn:disabled { 
+      opacity: 0.6; 
+      cursor: not-allowed; 
+      transform: none !important;
+    }
     .btn.secondary { background: #1f2937; color: var(--text); box-shadow: none; border: 1px solid var(--border); }
     .btn.danger { background: var(--danger); color: white; box-shadow: 0 6px 20px rgba(239,68,68,0.25); }
 
@@ -131,21 +136,32 @@
       <form id="signInForm">
         <div class="grid">
           <div>
-            <label for="name">Your name</label>
-            <input id="name" type="text" required placeholder="e.g., Jane Doe" autocomplete="name" />
+            <label for="email">Email</label>
+            <input id="email" type="email" required placeholder="you@example.com" autocomplete="email" />
           </div>
           <div>
-            <label for="role">Role</label>
-            <select id="role" required>
-              <option value="patient">Patient</option>
-              <option value="doctor">Doctor</option>
-              <option value="admin">Admin</option>
-            </select>
+            <label for="password">Password</label>
+            <input id="password" type="password" required placeholder="••••••••" autocomplete="current-password" />
           </div>
         </div>
         <div style="height: 12px"></div>
         <div class="row">
-          <button class="btn" type="submit">Sign in</button>
+          <button class="btn" type="submit" id="signInBtn">Sign in</button>
+        </div>
+        <div style="height: 8px"></div>
+        <div id="verificationCodeSection" class="hidden">
+          <div class="muted" style="margin-bottom: 8px;">Enter verification code sent to your email</div>
+          <div class="grid">
+            <div>
+              <label for="verificationCode">Verification Code</label>
+              <input id="verificationCode" type="text" placeholder="Enter code" />
+            </div>
+          </div>
+          <div style="height: 12px"></div>
+          <div class="row">
+            <button class="btn secondary" type="button" id="verifyBtn">Verify</button>
+            <button class="btn secondary" type="button" id="resendCodeBtn">Resend Code</button>
+          </div>
         </div>
       </form>
       <div class="footer">No account yet? <a href="./signup.html">Create one</a></div>
@@ -264,11 +280,60 @@
     </div>
   </div>
 
+  <!-- AWS Cognito SDK -->
+  <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+  
   <script>
+    // AWS Cognito Configuration - Update these with your Cognito User Pool details
+    const COGNITO_CONFIG = {
+      UserPoolId: 'us-east-1_J6s1BPTHx', // e.g., 'us-east-1_xxxxxxxxx'
+      ClientId: '76dlunfcl962e5eoog063ae8fq', // e.g., 'xxxxxxxxxxxxxxxxxxxxxxxxxx'
+      ClientSecret: '11r13l9l5krdp4veumv94jtpm8c6idoef977n26i148rklvo13d5', // Get this from Cognito App Client settings
+      Region: 'us-east-1' // e.g., 'us-east-1'
+    };
+
+    // Initialize Cognito User Pool
+    const poolData = {
+      UserPoolId: COGNITO_CONFIG.UserPoolId,
+      ClientId: COGNITO_CONFIG.ClientId
+    };
+    const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+
+    // Calculate SECRET_HASH for Cognito requests (required when App Client has a secret)
+    async function calculateSecretHash(username) {
+      if (!COGNITO_CONFIG.ClientSecret) {
+        return null; // No secret hash needed if no client secret
+      }
+      
+      const message = username + COGNITO_CONFIG.ClientId;
+      const encoder = new TextEncoder();
+      const keyData = encoder.encode(COGNITO_CONFIG.ClientSecret);
+      const messageData = encoder.encode(message);
+      
+      const key = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+      
+      const signature = await crypto.subtle.sign('HMAC', key, messageData);
+      const hashArray = Array.from(new Uint8Array(signature));
+      return btoa(String.fromCharCode(...hashArray));
+    }
+
+    // API Configuration
+    const API_BASE_URL = 'https://x4rdxhj5kg.execute-api.eu-west-3.amazonaws.com/prod';
+    const API_ENDPOINTS = {
+      patientInfo: '/registration'
+    };
+
     const storageKeys = Object.freeze({
       currentUser: 'hm.currentUser',
       users: 'hm.users',
-      documents: 'hm.documents'
+      documents: 'hm.documents',
+      pendingHealthData: 'hm.pendingHealthData'
     });
 
     const inMemoryFiles = new Map();
@@ -295,18 +360,69 @@
       localStorage.setItem(storageKeys.currentUser, JSON.stringify(user));
     }
 
-    function ensureUserExists(name, role) {
-      const users = getUsers();
-      let user = users.find(u => u.name.toLowerCase() === name.toLowerCase());
-      if (!user) {
-        user = { id: crypto.randomUUID(), name, role, profileNote: '' };
-        users.push(user);
-        setUsers(users);
-      } else {
-        user.role = role; // allow switching role for demo simplicity
-        setUsers(users);
+    // Get Cognito user attributes
+    async function getCognitoUserAttributes(cognitoUser) {
+      return new Promise((resolve, reject) => {
+        cognitoUser.getUserAttributes((err, attributes) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          const attrs = {};
+          attributes.forEach(attr => {
+            attrs[attr.Name] = attr.Value;
+          });
+          resolve(attrs);
+        });
+      });
+    }
+
+    // Sync pending health data after sign-in
+    async function syncPendingHealthData(cognitoUser) {
+      const pendingData = localStorage.getItem(storageKeys.pendingHealthData);
+      if (!pendingData) return;
+
+      try {
+        const healthData = JSON.parse(pendingData);
+        const session = await new Promise((resolve, reject) => {
+          cognitoUser.getSession((err, session) => {
+            if (err) reject(err);
+            else resolve(session);
+          });
+        });
+
+        if (session.isValid()) {
+          const idToken = session.getIdToken().getJwtToken();
+          const attrs = await getCognitoUserAttributes(cognitoUser);
+          
+          // Get role from localStorage
+          const users = getUsers();
+          const existingUser = users.find(u => u.email === attrs.email);
+          
+          const patientData = {
+            name: attrs.name || attrs.email,
+            email: attrs.email,
+            role: existingUser?.role || 'patient',
+            health: healthData
+          };
+
+          const response = await fetch(API_BASE_URL + API_ENDPOINTS.patientInfo, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify(patientData)
+          });
+
+          if (response.ok) {
+            localStorage.removeItem(storageKeys.pendingHealthData);
+            console.log('Pending health data synced successfully');
+          }
+        }
+      } catch (error) {
+        console.error('Error syncing pending health data:', error);
       }
-      return user;
     }
 
     function formatBytes(bytes) {
@@ -317,7 +433,7 @@
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    function updateUIForUser(user) {
+    async function updateUIForUser(user, cognitoUser = null) {
       const authCard = document.getElementById('authCard');
       const appCard = document.getElementById('appCard');
       const pill = document.getElementById('currentUserPill');
@@ -339,17 +455,47 @@
       if (user.role === 'doctor') listTitle.textContent = 'All Patient Documents';
       if (user.role === 'admin') listTitle.textContent = 'All Documents (Admin)';
 
+      // Get user data from localStorage or API
       const users = getUsers();
-      const freshUser = users.find(u => u.id === user.id) || user;
+      let freshUser = users.find(u => u.id === user.id || u.email === user.email);
+      
+      // If user from Cognito, get attributes
+      if (cognitoUser && !freshUser) {
+        try {
+          const attrs = await getCognitoUserAttributes(cognitoUser);
+          // Get role from localStorage
+          const users = getUsers();
+          const existingUser = users.find(u => u.email === attrs.email);
+          
+          freshUser = {
+            id: attrs.email,
+            email: attrs.email,
+            name: attrs.name || attrs.email,
+            role: existingUser?.role || 'patient',
+            profileNote: existingUser?.profileNote || ''
+          };
+        } catch (err) {
+          console.error('Error getting user attributes:', err);
+          freshUser = user;
+        }
+      } else if (!freshUser) {
+        freshUser = user;
+      }
+
       profileNote.value = freshUser.profileNote || '';
 
       if (healthSection) {
-        if (user.role === 'patient') {
+        if (freshUser.role === 'patient') {
           healthSection.classList.remove('hidden');
           prefillHealthForm(freshUser);
         } else {
           healthSection.classList.add('hidden');
         }
+      }
+
+      // Sync pending health data if patient
+      if (cognitoUser && freshUser.role === 'patient') {
+        await syncPendingHealthData(cognitoUser);
       }
 
       renderDocuments();
@@ -436,19 +582,315 @@
         });
     }
 
-    document.getElementById('signInForm').addEventListener('submit', (e) => {
+    let pendingCognitoUser = null; // Store user waiting for verification
+
+    document.getElementById('signInForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = document.getElementById('name').value.trim();
-      const role = document.getElementById('role').value;
-      if (!name) { alert('Please enter your name'); return; }
-      const user = ensureUserExists(name, role);
-      setCurrentUser(user);
-      updateUIForUser(user);
+      const signInBtn = document.getElementById('signInBtn');
+      const originalBtnText = signInBtn.textContent;
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const password = document.getElementById('password').value;
+
+      if (!email || !email.includes('@')) {
+        alert('Please enter a valid email');
+        return;
+      }
+      if (!password) {
+        alert('Please enter your password');
+        return;
+      }
+
+      signInBtn.disabled = true;
+      signInBtn.textContent = 'Signing in...';
+
+      // Calculate SECRET_HASH for authentication
+      const secretHash = await calculateSecretHash(email);
+      
+      const authenticationData = {
+        Username: email,
+        Password: password
+      };
+      
+      // Note: The amazon-cognito-identity-js SDK doesn't directly support SECRET_HASH
+      // We'll need to use direct API calls for authentication if client secret is required
+      const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
+      const userData = {
+        Username: email,
+        Pool: userPool
+      };
+      const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+
+      try {
+        // If client secret is configured, use direct API call for authentication
+        if (COGNITO_CONFIG.ClientSecret && COGNITO_CONFIG.ClientSecret !== 'YOUR_CLIENT_SECRET') {
+          // Use direct API call for InitiateAuth with SECRET_HASH
+          const authParams = {
+            ClientId: COGNITO_CONFIG.ClientId,
+            AuthFlow: 'USER_PASSWORD_AUTH',
+            AuthParameters: {
+              USERNAME: email,
+              PASSWORD: password,
+              SECRET_HASH: secretHash
+            }
+          };
+          
+          const response = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
+            method: 'POST',
+            headers: {
+              'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth',
+              'Content-Type': 'application/x-amz-json-1.1'
+            },
+            body: JSON.stringify(authParams)
+          });
+          
+          const authResult = await response.json();
+          
+          if (!response.ok) {
+            const errorType = authResult.__type || '';
+            const errorMessage = authResult.message || 'Sign in failed';
+            
+            if (errorType.includes('NotAuthorizedException')) {
+              throw { code: 'NotAuthorizedException', message: 'Incorrect email or password.' };
+            } else if (errorType.includes('UserNotConfirmedException')) {
+              throw { code: 'UserNotConfirmedException', message: 'Please verify your email first.' };
+            } else {
+              throw { code: errorType, message: errorMessage };
+            }
+          }
+          
+          // Extract tokens from response
+          const accessToken = authResult.AuthenticationResult.AccessToken;
+          const idToken = authResult.AuthenticationResult.IdToken;
+          
+          // Get user attributes using GetUser API
+          const getUserParams = {
+            AccessToken: accessToken
+          };
+          
+          const getUserResponse = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
+            method: 'POST',
+            headers: {
+              'X-Amz-Target': 'AWSCognitoIdentityProviderService.GetUser',
+              'Content-Type': 'application/x-amz-json-1.1'
+            },
+            body: JSON.stringify(getUserParams)
+          });
+          
+          const getUserResult = await getUserResponse.json();
+          
+          // Extract attributes
+          const attrs = {};
+          if (getUserResult.UserAttributes) {
+            getUserResult.UserAttributes.forEach(attr => {
+              attrs[attr.Name] = attr.Value;
+            });
+          }
+          
+          // Get role from localStorage or default to 'patient'
+          let allUsers = getUsers();
+          const existingUser = allUsers.find(u => u.email === (attrs.email || email));
+          
+          const user = {
+            id: attrs.email || email,
+            email: attrs.email || email,
+            name: attrs.name || email,
+            role: existingUser?.role || 'patient', // Get role from localStorage
+            profileNote: existingUser?.profileNote || '',
+            idToken,
+            accessToken
+          };
+          
+          // Store in localStorage
+          allUsers = getUsers();
+          const existingIndex = allUsers.findIndex(u => u.email === user.email);
+          if (existingIndex >= 0) {
+            allUsers[existingIndex] = { ...allUsers[existingIndex], ...user };
+          } else {
+            allUsers.push(user);
+          }
+          setUsers(allUsers);
+          setCurrentUser(user);
+          
+          await updateUIForUser(user, cognitoUser);
+          return;
+        }
+        
+        // Fallback to SDK method if no client secret
+        await new Promise((resolve, reject) => {
+          cognitoUser.authenticateUser(authenticationDetails, {
+            onSuccess: async (result) => {
+              try {
+                const idToken = result.getIdToken().getJwtToken();
+                const accessToken = result.getAccessToken().getJwtToken();
+                
+                // Get user attributes
+                const attrs = await getCognitoUserAttributes(cognitoUser);
+                
+                // Get role from localStorage or default to 'patient'
+                let allUsers = getUsers();
+                const existingUser = allUsers.find(u => u.email === attrs.email);
+                
+                const user = {
+                  id: attrs.email,
+                  email: attrs.email,
+                  name: attrs.name || attrs.email,
+                  role: existingUser?.role || 'patient',
+                  profileNote: existingUser?.profileNote || '',
+                  idToken,
+                  accessToken
+                };
+
+                // Store in localStorage
+                allUsers = getUsers();
+                const existingIndex = allUsers.findIndex(u => u.email === user.email);
+                if (existingIndex >= 0) {
+                  allUsers[existingIndex] = { ...allUsers[existingIndex], ...user };
+                } else {
+                  allUsers.push(user);
+                }
+                setUsers(allUsers);
+                setCurrentUser(user);
+
+                await updateUIForUser(user, cognitoUser);
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            },
+            onFailure: (err) => {
+              reject(err);
+            },
+            newPasswordRequired: (userAttributes, requiredAttributes) => {
+              // Handle new password requirement
+              reject(new Error('New password required. Please reset your password.'));
+            }
+          });
+        });
+      } catch (error) {
+        signInBtn.disabled = false;
+        signInBtn.textContent = originalBtnText;
+        
+        let errorMessage = 'Sign in failed. ';
+        if (error.code === 'NotAuthorizedException') {
+          errorMessage += 'Incorrect email or password.';
+        } else if (error.code === 'UserNotConfirmedException') {
+          errorMessage += 'Please verify your email first.';
+          // Show verification code section
+          pendingCognitoUser = cognitoUser;
+          document.getElementById('verificationCodeSection').classList.remove('hidden');
+        } else if (error.message) {
+          errorMessage += error.message;
+        } else {
+          errorMessage += 'Please try again.';
+        }
+        alert(errorMessage);
+      }
+    });
+
+    // Handle verification code
+    document.getElementById('verifyBtn').addEventListener('click', async () => {
+      if (!pendingCognitoUser) {
+        alert('No pending verification');
+        return;
+      }
+
+      const code = document.getElementById('verificationCode').value.trim();
+      if (!code) {
+        alert('Please enter verification code');
+        return;
+      }
+
+      try {
+        // Get email from the form
+        const email = document.getElementById('email').value.trim().toLowerCase();
+        const secretHash = await calculateSecretHash(email);
+        
+        // Use direct API call for confirmRegistration to include SECRET_HASH
+        const confirmParams = {
+          ClientId: COGNITO_CONFIG.ClientId,
+          Username: email,
+          ConfirmationCode: code,
+          SecretHash: secretHash
+        };
+        
+        const response = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
+          method: 'POST',
+          headers: {
+            'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmSignUp',
+            'Content-Type': 'application/x-amz-json-1.1'
+          },
+          body: JSON.stringify(confirmParams)
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+          const errorType = result.__type || '';
+          const errorMessage = result.message || 'Verification failed';
+          throw { code: errorType, message: errorMessage };
+        }
+
+        alert('Email verified! Please sign in again.');
+        document.getElementById('verificationCodeSection').classList.add('hidden');
+        document.getElementById('verificationCode').value = '';
+        pendingCognitoUser = null;
+      } catch (error) {
+        let errorMessage = 'Verification failed. ';
+        if (error.code === 'CodeMismatchException') {
+          errorMessage += 'Invalid verification code.';
+        } else if (error.message) {
+          errorMessage += error.message;
+        }
+        alert(errorMessage);
+      }
+    });
+
+    // Handle resend code
+    document.getElementById('resendCodeBtn').addEventListener('click', async () => {
+      if (!pendingCognitoUser) {
+        alert('No pending verification');
+        return;
+      }
+
+      try {
+        await new Promise((resolve, reject) => {
+          pendingCognitoUser.resendConfirmationCode((err, result) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            resolve(result);
+          });
+        });
+
+        alert('Verification code resent to your email');
+      } catch (error) {
+        alert('Failed to resend code: ' + (error.message || 'Please try again'));
+      }
     });
 
     document.getElementById('signOutBtn').addEventListener('click', () => {
+      const currentUser = getCurrentUser();
+      
+      // Sign out from Cognito
+      if (currentUser && currentUser.email) {
+        const userData = {
+          Username: currentUser.email,
+          Pool: userPool
+        };
+        const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+        cognitoUser.signOut();
+      }
+
+      // Clear local storage
       localStorage.removeItem(storageKeys.currentUser);
       updateUIForUser(null);
+      
+      // Clear form
+      document.getElementById('email').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('verificationCode').value = '';
+      document.getElementById('verificationCodeSection').classList.add('hidden');
     });
 
     document.getElementById('switchRoleBtn').addEventListener('click', () => {
@@ -580,8 +1022,63 @@
       updateUIForUser(getCurrentUser());
     });
 
+    // Check for existing Cognito session on page load
+    async function checkCognitoSession() {
+      const currentUser = userPool.getCurrentUser();
+      if (currentUser) {
+        try {
+          const session = await new Promise((resolve, reject) => {
+            currentUser.getSession((err, session) => {
+              if (err) reject(err);
+              else resolve(session);
+            });
+          });
+
+          if (session.isValid()) {
+            const idToken = session.getIdToken().getJwtToken();
+            const attrs = await getCognitoUserAttributes(currentUser);
+            
+            // Get role from localStorage or default to 'patient'
+            const users = getUsers();
+            const existingUser = users.find(u => u.email === attrs.email);
+            
+            const user = {
+              id: attrs.email,
+              email: attrs.email,
+              name: attrs.name || attrs.email,
+              role: existingUser?.role || 'patient',
+              profileNote: existingUser?.profileNote || '',
+              idToken
+            };
+
+            // Update localStorage
+            const existingIndex = users.findIndex(u => u.email === user.email);
+            if (existingIndex >= 0) {
+              users[existingIndex] = { ...users[existingIndex], ...user };
+            } else {
+              users.push(user);
+            }
+            setUsers(users);
+            setCurrentUser(user);
+
+            await updateUIForUser(user, currentUser);
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking Cognito session:', err);
+          // If session is invalid, sign out
+          if (currentUser) {
+            currentUser.signOut();
+          }
+        }
+      }
+      
+      // Fallback to localStorage if no valid Cognito session
+      updateUIForUser(getCurrentUser());
+    }
+
     // Init
-    updateUIForUser(getCurrentUser());
+    checkCognitoSession();
   </script>
 </body>
 </html>
