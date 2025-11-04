@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Health Manager - Sign Up</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --muted: #6b7280;
+      --text: #e5e7eb;
+      --accent: #22c55e;
+      --danger: #ef4444;
+      --focus: #60a5fa;
+      --card: #0b1220;
+      --border: #1f2937;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1000px 500px at 10% 10%, #0b1220 10%, transparent 60%),
+                  radial-gradient(800px 400px at 90% 0%, #0b1220 10%, transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel), rgba(17,24,39,0.6));
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    h1 { margin: 0 0 12px 0; font-size: 22px; font-weight: 700; }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: 10px; align-items: center; }
+    .row > * { flex: 1; }
+
+    label { font-size: 13px; color: var(--muted); }
+    input[type="text"], input[type="email"], input[type="password"], select {
+      width: 100%;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(96,165,250,0.2); }
+
+    .btn {
+      appearance: none;
+      border: none;
+      background: var(--accent);
+      color: #04110a;
+      font-weight: 700;
+      padding: 10px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 6px 20px rgba(34,197,94,0.25);
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn.secondary { background: #1f2937; color: var(--text); box-shadow: none; border: 1px solid var(--border); }
+
+    .footer { margin-top: 18px; text-align: center; font-size: 12px; color: var(--muted); }
+    a { color: var(--focus); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Create your account</h1>
+      <div class="muted">Demo only: data stored in your browser (localStorage)</div>
+      <div style="height: 12px"></div>
+      <form id="signUpForm" novalidate>
+        <div style="display: grid; gap: 12px;">
+          <div>
+            <label for="name">Full name</label>
+            <input id="name" type="text" required placeholder="e.g., Jane Doe" autocomplete="name" />
+          </div>
+          <div>
+            <label for="email">Email</label>
+            <input id="email" type="email" required placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div>
+            <label for="password">Password</label>
+            <input id="password" type="password" required placeholder="••••••••" autocomplete="new-password" minlength="6" />
+          </div>
+          <div>
+            <label for="role">Role</label>
+            <select id="role" required>
+              <option value="patient">Patient</option>
+              <option value="doctor">Doctor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <div style="height: 12px"></div>
+        <div id="patientHealthSection" class="hidden">
+          <h1 style="font-size:16px; margin:0 0 8px 0;">Health Info (Patient)</h1>
+          <div class="muted" style="margin-bottom:8px;">Stored locally. Units: height in cm, weight in kg.</div>
+          <div style="display:grid; gap:12px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label for="heightCm">Height (cm)</label>
+                <input id="heightCm" type="text" inputmode="decimal" placeholder="e.g., 170" />
+              </div>
+              <div>
+                <label for="weightKg">Weight (kg)</label>
+                <input id="weightKg" type="text" inputmode="decimal" placeholder="e.g., 65" />
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label for="bloodType">Blood type</label>
+                <select id="bloodType">
+                  <option value="">Select</option>
+                  <option>O+</option>
+                  <option>O-</option>
+                  <option>A+</option>
+                  <option>A-</option>
+                  <option>B+</option>
+                  <option>B-</option>
+                  <option>AB+</option>
+                  <option>AB-</option>
+                </select>
+              </div>
+              <div>
+                <label for="age">Age</label>
+                <input id="age" type="text" inputmode="numeric" placeholder="e.g., 34" />
+              </div>
+            </div>
+            <div>
+              <label for="allergies">Allergies</label>
+              <textarea id="allergies" placeholder="e.g., Peanuts, penicillin"></textarea>
+            </div>
+            <div>
+              <label for="conditions">Conditions</label>
+              <textarea id="conditions" placeholder="e.g., Asthma"></textarea>
+            </div>
+          </div>
+        </div>
+        <div style="height: 12px"></div>
+        <div class="row">
+          <button class="btn" type="submit">Sign up</button>
+          <a class="btn secondary" href="./index.html" style="text-align:center;">Cancel</a>
+        </div>
+      </form>
+      <div class="footer">Already have an account? <a href="./index.html">Sign in</a></div>
+    </div>
+  </div>
+
+  <script>
+    const storageKeys = Object.freeze({
+      currentUser: 'hm.currentUser',
+      users: 'hm.users'
+    });
+
+    function getUsers() {
+      const raw = localStorage.getItem(storageKeys.users);
+      return raw ? JSON.parse(raw) : [];
+    }
+    function setUsers(users) {
+      localStorage.setItem(storageKeys.users, JSON.stringify(users));
+    }
+
+    async function sha256(text) {
+      const enc = new TextEncoder();
+      const data = enc.encode(text);
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      const arr = Array.from(new Uint8Array(buf));
+      return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function parseNumber(value) {
+      if (typeof value !== 'string') return null;
+      const v = value.replace(/,/g, '.').trim();
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function toggleHealthSection() {
+      const role = document.getElementById('role').value;
+      const section = document.getElementById('patientHealthSection');
+      if (!section) return;
+      if (role === 'patient') section.classList.remove('hidden');
+      else section.classList.add('hidden');
+    }
+
+    document.getElementById('role').addEventListener('change', toggleHealthSection);
+    // initialize visibility
+    toggleHealthSection();
+
+    document.getElementById('signUpForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const password = document.getElementById('password').value;
+      const role = document.getElementById('role').value;
+
+      if (!name) { alert('Please enter your name'); return; }
+      if (!email || !email.includes('@')) { alert('Enter a valid email'); return; }
+      if (!password || password.length < 6) { alert('Password must be at least 6 characters'); return; }
+
+      const users = getUsers();
+      if (users.some(u => (u.email || '').toLowerCase() === email)) {
+        alert('An account with this email already exists.');
+        return;
+      }
+
+      const salt = crypto.getRandomValues(new Uint32Array(1))[0].toString(16);
+      const passwordHash = await sha256(password + ':' + salt);
+
+      const user = {
+        id: crypto.randomUUID(),
+        name,
+        email,
+        role,
+        profileNote: '',
+        // demo only, do not use this scheme in production
+        passwordHash,
+        salt
+      };
+
+      if (role === 'patient') {
+        const heightCm = parseNumber(document.getElementById('heightCm').value);
+        const weightKg = parseNumber(document.getElementById('weightKg').value);
+        const bloodType = document.getElementById('bloodType').value;
+        const age = parseNumber(document.getElementById('age').value);
+        const allergies = document.getElementById('allergies').value.trim();
+        const conditions = document.getElementById('conditions').value.trim();
+
+        user.health = {
+          heightCm: heightCm ?? null,
+          weightKg: weightKg ?? null,
+          bloodType: bloodType || '',
+          age: age ?? null,
+          allergies,
+          conditions
+        };
+      }
+
+      users.push(user);
+      setUsers(users);
+
+      alert('Account created. You can now sign in.');
+      window.location.href = './index.html';
+    });
+  </script>
+</body>
+</html>
+
