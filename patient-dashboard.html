@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patient Dashboard - Health Manager</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --muted: #6b7280;
+      --text: #e5e7eb;
+      --accent: #22c55e;
+      --danger: #ef4444;
+      --focus: #60a5fa;
+      --card: #0b1220;
+      --border: #1f2937;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1000px 500px at 10% 10%, #0b1220 10%, transparent 60%),
+                  radial-gradient(800px 400px at 90% 0%, #0b1220 10%, transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      background: #0b1220;
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel), rgba(17,24,39,0.6));
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      margin-bottom: 24px;
+    }
+
+    .card h2 {
+      margin: 0 0 8px 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    select,
+    textarea {
+      width: 100%;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.2);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .btn {
+      appearance: none;
+      border: none;
+      background: var(--accent);
+      color: #04110a;
+      font-weight: 700;
+      padding: 10px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 6px 20px rgba(34,197,94,0.25);
+      font-size: 14px;
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .btn.secondary {
+      background: #1f2937;
+      color: var(--text);
+      box-shadow: none;
+      border: 1px solid var(--border);
+    }
+
+    .btn.danger {
+      background: var(--danger);
+      color: white;
+      box-shadow: 0 6px 20px rgba(239,68,68,0.25);
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .row > * {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .item-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .item-meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .health-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .health-stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .health-stat-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .health-stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+
+    .alert {
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      color: var(--accent);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <h1>Patient Dashboard</h1>
+        <div class="muted" id="welcomeMessage">Welcome back</div>
+      </div>
+      <div class="user-info">
+        <div class="pill" id="userPill">Loading...</div>
+        <button class="btn danger" id="signOutBtn">Sign out</button>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="card loading">
+      <div>Loading your dashboard...</div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden">
+      <!-- Health Summary -->
+      <div class="card">
+        <h2>Health Summary</h2>
+        <div class="muted">Your current health information at a glance</div>
+        <div class="health-summary" id="healthSummary">
+          <div class="health-stat">
+            <div class="health-stat-label">BMI</div>
+            <div class="health-stat-value" id="bmiValue">—</div>
+          </div>
+          <div class="health-stat">
+            <div class="health-stat-label">Blood Type</div>
+            <div class="health-stat-value" id="bloodTypeValue">—</div>
+          </div>
+          <div class="health-stat">
+            <div class="health-stat-label">Age</div>
+            <div class="health-stat-value" id="ageValue">—</div>
+          </div>
+          <div class="health-stat">
+            <div class="health-stat-label">Height</div>
+            <div class="health-stat-value" id="heightValue">—</div>
+          </div>
+          <div class="health-stat">
+            <div class="health-stat-label">Weight</div>
+            <div class="health-stat-value" id="weightValue">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Health Information Form -->
+      <div class="card">
+        <h2>Update Health Information</h2>
+        <div class="muted">Keep your health information up to date. Units: height in cm, weight in kg.</div>
+        <form id="healthForm">
+          <div class="grid grid-2">
+            <div>
+              <label for="heightCm">Height (cm)</label>
+              <input id="heightCm" type="text" inputmode="decimal" placeholder="e.g., 170" />
+            </div>
+            <div>
+              <label for="weightKg">Weight (kg)</label>
+              <input id="weightKg" type="text" inputmode="decimal" placeholder="e.g., 65" />
+            </div>
+            <div>
+              <label for="bloodType">Blood type</label>
+              <select id="bloodType">
+                <option value="">Select</option>
+                <option>O+</option>
+                <option>O-</option>
+                <option>A+</option>
+                <option>A-</option>
+                <option>B+</option>
+                <option>B-</option>
+                <option>AB+</option>
+                <option>AB-</option>
+              </select>
+            </div>
+            <div>
+              <label for="age">Age</label>
+              <input id="age" type="text" inputmode="numeric" placeholder="e.g., 34" />
+            </div>
+          </div>
+          <div style="height: 12px"></div>
+          <div>
+            <label for="allergies">Allergies</label>
+            <textarea id="allergies" placeholder="e.g., Peanuts, penicillin"></textarea>
+          </div>
+          <div style="height: 12px"></div>
+          <div>
+            <label for="conditions">Medical Conditions</label>
+            <textarea id="conditions" placeholder="e.g., Asthma"></textarea>
+          </div>
+          <div style="height: 12px"></div>
+          <div class="row">
+            <button class="btn" type="submit">Save Health Info</button>
+            <div class="pill" id="bmiPill">BMI: —</div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Profile Information -->
+      <div class="card">
+        <h2>Profile Information</h2>
+        <div class="muted">Update your profile note (visible to doctors)</div>
+        <form id="profileForm">
+          <div>
+            <label for="profileNote">Profile Note</label>
+            <textarea id="profileNote" placeholder="e.g., Allergic to penicillin, prefer morning appointments"></textarea>
+          </div>
+          <div style="height: 12px"></div>
+          <div class="row">
+            <button class="btn secondary" type="submit">Save Profile Note</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Upload Document -->
+      <div class="card">
+        <h2>Upload Document</h2>
+        <div class="muted">Upload medical documents, test results, or other health-related files</div>
+        <form id="uploadForm">
+          <div class="grid">
+            <div>
+              <label for="fileInput">Choose file</label>
+              <input id="fileInput" type="file" />
+            </div>
+            <div>
+              <label for="docNotes">Notes</label>
+              <textarea id="docNotes" placeholder="Optional notes about this document"></textarea>
+            </div>
+          </div>
+          <div style="height: 12px"></div>
+          <div class="row">
+            <button class="btn" type="submit">Upload Document</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- My Documents -->
+      <div class="card">
+        <h2>My Documents</h2>
+        <div class="muted">View and manage your uploaded documents</div>
+        <div class="list" id="docList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AWS Cognito SDK -->
+  <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+  
+  <script>
+    // AWS Cognito Configuration
+    const COGNITO_CONFIG = {
+      UserPoolId: 'us-east-1_J6s1BPTHx',
+      ClientId: '76dlunfcl962e5eoog063ae8fq',
+      ClientSecret: '11r13l9l5krdp4veumv94jtpm8c6idoef977n26i148rklvo13d5',
+      Region: 'us-east-1'
+    };
+
+    // Initialize Cognito User Pool
+    const poolData = {
+      UserPoolId: COGNITO_CONFIG.UserPoolId,
+      ClientId: COGNITO_CONFIG.ClientId
+    };
+    const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+
+    // API Configuration
+    const API_BASE_URL = 'https://x4rdxhj5kg.execute-api.eu-west-3.amazonaws.com/prod';
+    const API_ENDPOINTS = {
+      patientInfo: '/registration'
+    };
+
+    const storageKeys = Object.freeze({
+      currentUser: 'hm.currentUser',
+      users: 'hm.users',
+      documents: 'hm.documents',
+      pendingHealthData: 'hm.pendingHealthData'
+    });
+
+    const inMemoryFiles = new Map();
+
+    function getUsers() {
+      const raw = localStorage.getItem(storageKeys.users);
+      return raw ? JSON.parse(raw) : [];
+    }
+
+    function setUsers(users) {
+      localStorage.setItem(storageKeys.users, JSON.stringify(users));
+    }
+
+    function getDocuments() {
+      const raw = localStorage.getItem(storageKeys.documents);
+      return raw ? JSON.parse(raw) : [];
+    }
+
+    function setDocuments(docs) {
+      localStorage.setItem(storageKeys.documents, JSON.stringify(docs));
+    }
+
+    function getCurrentUser() {
+      const raw = localStorage.getItem(storageKeys.currentUser);
+      return raw ? JSON.parse(raw) : null;
+    }
+
+    function setCurrentUser(user) {
+      localStorage.setItem(storageKeys.currentUser, JSON.stringify(user));
+    }
+
+    // Get Cognito user attributes
+    async function getCognitoUserAttributes(cognitoUser) {
+      return new Promise((resolve, reject) => {
+        cognitoUser.getUserAttributes((err, attributes) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          const attrs = {};
+          attributes.forEach(attr => {
+            attrs[attr.Name] = attr.Value;
+          });
+          resolve(attrs);
+        });
+      });
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function parseNumber(value) {
+      if (typeof value !== 'string') return null;
+      const v = value.replace(/,/g, '.').trim();
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function computeAndShowBmi() {
+      const h = parseNumber(document.getElementById('heightCm').value);
+      const w = parseNumber(document.getElementById('weightKg').value);
+      const pill = document.getElementById('bmiPill');
+      if (!pill) return;
+      if (!h || !w || h <= 0 || w <= 0) {
+        pill.textContent = 'BMI: —';
+        return;
+      }
+      const meters = h / 100;
+      const bmi = w / (meters * meters);
+      pill.textContent = 'BMI: ' + bmi.toFixed(1);
+      updateHealthSummary();
+    }
+
+    function updateHealthSummary() {
+      const health = getCurrentUser()?.health || {};
+      const heightCm = health.heightCm;
+      const weightKg = health.weightKg;
+      const bloodType = health.bloodType || '—';
+      const age = health.age || '—';
+
+      // Calculate BMI
+      let bmi = '—';
+      if (heightCm && weightKg && heightCm > 0 && weightKg > 0) {
+        const meters = heightCm / 100;
+        bmi = (weightKg / (meters * meters)).toFixed(1);
+      }
+
+      document.getElementById('bmiValue').textContent = bmi;
+      document.getElementById('bloodTypeValue').textContent = bloodType;
+      document.getElementById('ageValue').textContent = age;
+      document.getElementById('heightValue').textContent = heightCm ? heightCm + ' cm' : '—';
+      document.getElementById('weightValue').textContent = weightKg ? weightKg + ' kg' : '—';
+    }
+
+    function prefillHealthForm(user) {
+      const health = (user && user.health) || {};
+      document.getElementById('heightCm').value = health.heightCm ?? '';
+      document.getElementById('weightKg').value = health.weightKg ?? '';
+      document.getElementById('bloodType').value = health.bloodType ?? '';
+      document.getElementById('age').value = health.age ?? '';
+      document.getElementById('allergies').value = health.allergies ?? '';
+      document.getElementById('conditions').value = health.conditions ?? '';
+      computeAndShowBmi();
+    }
+
+    function renderDocuments() {
+      const list = document.getElementById('docList');
+      list.innerHTML = '';
+      const user = getCurrentUser();
+      if (!user) return;
+
+      const docs = getDocuments();
+      const filtered = docs.filter(d => d.ownerId === user.id);
+
+      if (filtered.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'No documents yet. Upload your first document above.';
+        list.appendChild(empty);
+        return;
+      }
+
+      filtered
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .forEach(doc => {
+          const item = document.createElement('div');
+          item.className = 'item';
+
+          const left = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'item-title';
+          title.textContent = doc.fileName;
+
+          const meta = document.createElement('div');
+          meta.className = 'item-meta';
+          const date = new Date(doc.createdAt).toLocaleString();
+          meta.textContent = formatBytes(doc.fileSize) + ' · ' + date + (doc.notes ? ' · ' + doc.notes : '');
+
+          left.appendChild(title);
+          left.appendChild(meta);
+
+          const actions = document.createElement('div');
+          actions.className = 'item-actions';
+
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'btn secondary';
+          viewBtn.textContent = 'View';
+          viewBtn.onclick = () => {
+            const blob = inMemoryFiles.get(doc.id);
+            if (!blob) {
+              alert('File not available (only kept in-memory this session).');
+              return;
+            }
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+          };
+
+          const delBtn = document.createElement('button');
+          delBtn.className = 'btn danger';
+          delBtn.textContent = 'Delete';
+          delBtn.onclick = () => {
+            const confirmDel = confirm('Delete "' + doc.fileName + '"?');
+            if (!confirmDel) return;
+            const remaining = getDocuments().filter(d => d.id !== doc.id);
+            setDocuments(remaining);
+            inMemoryFiles.delete(doc.id);
+            renderDocuments();
+          };
+
+          actions.appendChild(viewBtn);
+          actions.appendChild(delBtn);
+
+          item.appendChild(left);
+          item.appendChild(actions);
+          list.appendChild(item);
+        });
+    }
+
+    async function loadUserData() {
+      const loadingState = document.getElementById('loadingState');
+      const mainContent = document.getElementById('mainContent');
+
+      // Check for existing Cognito session
+      const currentCognitoUser = userPool.getCurrentUser();
+      let user = getCurrentUser();
+
+      if (currentCognitoUser && !user) {
+        try {
+          const session = await new Promise((resolve, reject) => {
+            currentCognitoUser.getSession((err, session) => {
+              if (err) reject(err);
+              else resolve(session);
+            });
+          });
+
+          if (session.isValid()) {
+            const idToken = session.getIdToken().getJwtToken();
+            const attrs = await getCognitoUserAttributes(currentCognitoUser);
+            
+            const users = getUsers();
+            const existingUser = users.find(u => u.email === attrs.email);
+            
+            user = {
+              id: attrs.email,
+              email: attrs.email,
+              name: attrs.name || attrs.email,
+              role: existingUser?.role || 'patient',
+              profileNote: existingUser?.profileNote || '',
+              health: existingUser?.health || {},
+              idToken
+            };
+
+            const existingIndex = users.findIndex(u => u.email === user.email);
+            if (existingIndex >= 0) {
+              users[existingIndex] = { ...users[existingIndex], ...user };
+            } else {
+              users.push(user);
+            }
+            setUsers(users);
+            setCurrentUser(user);
+          }
+        } catch (err) {
+          console.error('Error loading Cognito session:', err);
+        }
+      }
+
+      // Redirect if not a patient or not signed in
+      if (!user || user.role !== 'patient') {
+        window.location.href = './index.html';
+        return;
+      }
+
+      // Update UI
+      document.getElementById('userPill').textContent = user.name + ' · Patient';
+      document.getElementById('welcomeMessage').textContent = 'Welcome back, ' + user.name;
+      document.getElementById('profileNote').value = user.profileNote || '';
+      
+      prefillHealthForm(user);
+      updateHealthSummary();
+      renderDocuments();
+
+      loadingState.classList.add('hidden');
+      mainContent.classList.remove('hidden');
+    }
+
+    // Event Listeners
+    document.getElementById('signOutBtn').addEventListener('click', () => {
+      const currentUser = getCurrentUser();
+      
+      // Sign out from Cognito
+      if (currentUser && currentUser.email) {
+        const userData = {
+          Username: currentUser.email,
+          Pool: userPool
+        };
+        const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+        cognitoUser.signOut();
+      }
+
+      // Clear local storage
+      localStorage.removeItem(storageKeys.currentUser);
+      window.location.href = './index.html';
+    });
+
+    ['heightCm', 'weightKg'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', computeAndShowBmi);
+    });
+
+    document.getElementById('healthForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const user = getCurrentUser();
+      if (!user) return;
+
+      const heightCm = parseNumber(document.getElementById('heightCm').value);
+      const weightKg = parseNumber(document.getElementById('weightKg').value);
+      const bloodType = document.getElementById('bloodType').value;
+      const age = parseNumber(document.getElementById('age').value);
+      const allergies = document.getElementById('allergies').value.trim();
+      const conditions = document.getElementById('conditions').value.trim();
+
+      const users = getUsers();
+      const idx = users.findIndex(u => u.id === user.id);
+      if (idx >= 0) {
+        users[idx].health = {
+          heightCm: heightCm ?? null,
+          weightKg: weightKg ?? null,
+          bloodType: bloodType || '',
+          age: age ?? null,
+          allergies,
+          conditions
+        };
+        setUsers(users);
+        setCurrentUser(users[idx]);
+        updateHealthSummary();
+        computeAndShowBmi();
+        alert('Health information saved successfully!');
+      }
+    });
+
+    document.getElementById('profileForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const user = getCurrentUser();
+      if (!user) return;
+
+      const note = document.getElementById('profileNote').value.trim();
+      const users = getUsers();
+      const idx = users.findIndex(u => u.id === user.id);
+      if (idx >= 0) {
+        users[idx].profileNote = note;
+        setUsers(users);
+        setCurrentUser(users[idx]);
+        alert('Profile note saved successfully!');
+      }
+    });
+
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const user = getCurrentUser();
+      if (!user) {
+        alert('Please sign in first.');
+        return;
+      }
+
+      const input = document.getElementById('fileInput');
+      const notes = document.getElementById('docNotes').value.trim();
+      
+      if (!input.files || input.files.length === 0) {
+        alert('Select a file to upload.');
+        return;
+      }
+
+      const file = input.files[0];
+      const arrayBuffer = await file.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: file.type || 'application/octet-stream' });
+
+      const doc = {
+        id: crypto.randomUUID(),
+        ownerId: user.id,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        createdAt: Date.now(),
+        notes
+      };
+
+      const docs = getDocuments();
+      docs.push(doc);
+      setDocuments(docs);
+      inMemoryFiles.set(doc.id, blob);
+
+      document.getElementById('fileInput').value = '';
+      document.getElementById('docNotes').value = '';
+      renderDocuments();
+      alert('Document uploaded successfully!');
+    });
+
+    // Initialize
+    loadUserData();
+  </script>
+</body>
+</html>
+
+
+

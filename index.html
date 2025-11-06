@@ -425,6 +425,236 @@
       }
     }
 
+    // Helper function to handle authentication errors
+    function handleAuthError(err, reject) {
+      console.error('Authentication error:', err);
+      
+      let errorCode = err.code || err.name || '';
+      let errorMessage = err.message || 'Unknown error';
+      
+      if (errorMessage.includes('NotAuthorizedException') || errorCode === 'NotAuthorizedException') {
+        reject({ code: 'NotAuthorizedException', message: 'Incorrect email or password. Please check your credentials and try again.' });
+      } else if (errorMessage.includes('UserNotConfirmedException') || errorCode === 'UserNotConfirmedException') {
+        reject({ code: 'UserNotConfirmedException', message: 'Please verify your email first.' });
+      } else if (errorMessage.includes('UserNotFoundException') || errorCode === 'UserNotFoundException') {
+        reject({ code: 'UserNotFoundException', message: 'No account found with this email address.' });
+      } else if (errorMessage.includes('InvalidParameterException') || errorCode === 'InvalidParameterException') {
+        reject({ code: 'InvalidParameterException', message: 'Invalid parameters. Please check your email and password format.' });
+      } else {
+        reject({ code: errorCode, message: errorMessage, originalError: err });
+      }
+    }
+
+    // SRP authentication with SECRET_HASH support
+    async function authenticateWithSRPAndSecretHash(email, password, cognitoUser) {
+      try {
+        const secretHash = await calculateSecretHash(email);
+        
+        // Step 1: InitiateAuth with USER_SRP_AUTH
+        const initiateAuthParams = {
+          ClientId: COGNITO_CONFIG.ClientId,
+          AuthFlow: 'USER_SRP_AUTH',
+          AuthParameters: {
+            USERNAME: email,
+            SRP_A: '' // Will be calculated by SDK's AuthenticationHelper
+          }
+        };
+        
+        if (secretHash) {
+          initiateAuthParams.AuthParameters.SECRET_HASH = secretHash;
+        }
+
+        // Use SDK's AuthenticationHelper for SRP calculations
+        // Extract pool name from UserPoolId (format: region_poolname)
+        const poolName = COGNITO_CONFIG.UserPoolId.split('_')[1];
+        
+        // Check if AuthenticationHelper is available
+        if (typeof AmazonCognitoIdentity.AuthenticationHelper === 'undefined') {
+          throw new Error('AuthenticationHelper not available. Please ensure you are using the full SDK version.');
+        }
+        
+        const authenticationHelper = new AmazonCognitoIdentity.AuthenticationHelper(poolName);
+        
+        // Generate A value for SRP
+        const aValue = authenticationHelper.getLargeAValue();
+        initiateAuthParams.AuthParameters.SRP_A = aValue;
+        const initiateResponse = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
+          method: 'POST',
+          headers: {
+            'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth',
+            'Content-Type': 'application/x-amz-json-1.1'
+          },
+          body: JSON.stringify(initiateAuthParams)
+        });
+
+        const initiateResult = await initiateResponse.json();
+
+        if (!initiateResponse.ok) {
+          const errorType = initiateResult.__type || '';
+          const errorMessage = initiateResult.message || 'Authentication failed';
+          throw { code: errorType, message: errorMessage };
+        }
+
+        // Step 2: Calculate password verifier and respond to challenge
+        const challengeParameters = initiateResult.ChallengeParameters;
+        const challengeName = initiateResult.ChallengeName;
+
+        if (challengeName !== 'PASSWORD_VERIFIER') {
+          throw { code: 'UnexpectedChallenge', message: 'Unexpected challenge: ' + challengeName };
+        }
+
+        // Calculate password verifier using SDK's helper
+        const passwordVerifier = authenticationHelper.getPasswordAuthenticationKey(
+          challengeParameters.USER_ID_FOR_SRP,
+          password,
+          challengeParameters.SRP_B,
+          challengeParameters.SALT
+        );
+
+        // Format timestamp: YYYYMMDDTHHmmss
+        const now = new Date();
+        const timestamp = now.getUTCFullYear().toString() +
+          String(now.getUTCMonth() + 1).padStart(2, '0') +
+          String(now.getUTCDate()).padStart(2, '0') +
+          'T' +
+          String(now.getUTCHours()).padStart(2, '0') +
+          String(now.getUTCMinutes()).padStart(2, '0') +
+          String(now.getUTCSeconds()).padStart(2, '0') +
+          'Z';
+        
+        const secretBlock = challengeParameters.SECRET_BLOCK;
+        
+        // Create message for HMAC (concatenate strings)
+        const msgString = challengeParameters.USER_ID_FOR_SRP +
+          challengeParameters.SECRET_BLOCK +
+          timestamp;
+        
+        // Convert message to Uint8Array
+        const encoder = new TextEncoder();
+        const msg = encoder.encode(msgString);
+        
+        // Convert passwordVerifier (ArrayBuffer) to CryptoKey for HMAC
+        const hmacKey = await crypto.subtle.importKey(
+          'raw',
+          passwordVerifier,
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+        
+        // Calculate HMAC signature
+        const signature = await crypto.subtle.sign('HMAC', hmacKey, msg);
+        const signatureString = btoa(String.fromCharCode(...new Uint8Array(signature)));
+
+        // Step 3: RespondToAuthChallenge
+        const respondParams = {
+          ClientId: COGNITO_CONFIG.ClientId,
+          ChallengeName: 'PASSWORD_VERIFIER',
+          ChallengeResponses: {
+            USERNAME: challengeParameters.USERNAME,
+            PASSWORD_CLAIM_SECRET_BLOCK: secretBlock,
+            PASSWORD_CLAIM_SIGNATURE: signatureString,
+            TIMESTAMP: timestamp
+          }
+        };
+
+        if (secretHash) {
+          respondParams.ChallengeResponses.SECRET_HASH = secretHash;
+        }
+
+        const respondResponse = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
+          method: 'POST',
+          headers: {
+            'X-Amz-Target': 'AWSCognitoIdentityProviderService.RespondToAuthChallenge',
+            'Content-Type': 'application/x-amz-json-1.1'
+          },
+          body: JSON.stringify(respondParams)
+        });
+
+        const respondResult = await respondResponse.json();
+
+        if (!respondResponse.ok) {
+          const errorType = respondResult.__type || '';
+          const errorMessage = respondResult.message || 'Authentication failed';
+          throw { code: errorType, message: errorMessage };
+        }
+
+        // Check if new password is required
+        if (respondResult.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+          throw new Error('New password required. Please reset your password.');
+        }
+
+        // Extract tokens
+        const authenticationResult = respondResult.AuthenticationResult;
+        if (!authenticationResult) {
+          throw { code: 'NoTokens', message: 'No authentication tokens received' };
+        }
+
+        const idToken = authenticationResult.IdToken;
+        const accessToken = authenticationResult.AccessToken;
+
+        // Store session in CognitoUser for SDK compatibility
+        const sessionData = {
+          IdToken: new AmazonCognitoIdentity.CognitoIdToken({ IdToken: idToken }),
+          AccessToken: new AmazonCognitoIdentity.CognitoAccessToken({ AccessToken: accessToken }),
+          RefreshToken: authenticationResult.RefreshToken 
+            ? new AmazonCognitoIdentity.CognitoRefreshToken({ RefreshToken: authenticationResult.RefreshToken })
+            : null
+        };
+        
+        const session = new AmazonCognitoIdentity.CognitoUserSession(sessionData);
+        cognitoUser.setSignInUserSession(session);
+
+        // Get user attributes
+        const attrs = await getCognitoUserAttributes(cognitoUser);
+        
+        // Get role from localStorage or default to 'patient'
+        let allUsers = getUsers();
+        const existingUser = allUsers.find(u => u.email === attrs.email);
+        
+        const user = {
+          id: attrs.email,
+          email: attrs.email,
+          name: attrs.name || attrs.email,
+          role: existingUser?.role || 'patient',
+          profileNote: existingUser?.profileNote || '',
+          idToken,
+          accessToken
+        };
+
+        // Store in localStorage
+        allUsers = getUsers();
+        const existingIndex = allUsers.findIndex(u => u.email === user.email);
+        if (existingIndex >= 0) {
+          allUsers[existingIndex] = { ...allUsers[existingIndex], ...user };
+        } else {
+          allUsers.push(user);
+        }
+        setUsers(allUsers);
+        setCurrentUser(user);
+
+        await updateUIForUser(user, cognitoUser);
+      } catch (error) {
+        // Handle errors from SRP authentication
+        console.error('SRP authentication error:', error);
+        
+        // Re-throw with proper error format
+        const errorType = error.code || error.__type || '';
+        const errorMessage = error.message || 'Authentication failed';
+        
+        // Check for specific error types
+        if (errorType.includes('NotAuthorizedException') || errorMessage.includes('NotAuthorizedException')) {
+          throw { code: 'NotAuthorizedException', message: 'Incorrect email or password. Please check your credentials.' };
+        } else if (errorType.includes('UserNotConfirmedException') || errorMessage.includes('UserNotConfirmedException')) {
+          throw { code: 'UserNotConfirmedException', message: 'Please verify your email first.' };
+        } else if (errorType.includes('UserNotFoundException') || errorMessage.includes('UserNotFoundException')) {
+          throw { code: 'UserNotFoundException', message: 'No account found with this email address.' };
+        } else {
+          throw { code: errorType, message: errorMessage, originalError: error };
+        }
+      }
+    }
+
     function formatBytes(bytes) {
       if (bytes === 0) return '0 B';
       const k = 1024;
@@ -446,14 +676,6 @@
         appCard.classList.add('hidden');
         return;
       }
-
-      authCard.classList.add('hidden');
-      appCard.classList.remove('hidden');
-      pill.textContent = user.name + ' · ' + user.role;
-
-      if (user.role === 'patient') listTitle.textContent = 'My Documents';
-      if (user.role === 'doctor') listTitle.textContent = 'All Patient Documents';
-      if (user.role === 'admin') listTitle.textContent = 'All Documents (Admin)';
 
       // Get user data from localStorage or API
       const users = getUsers();
@@ -482,20 +704,28 @@
         freshUser = user;
       }
 
+      // Redirect patients to the patient dashboard
+      if (freshUser.role === 'patient') {
+        // Sync pending health data if patient
+        if (cognitoUser) {
+          await syncPendingHealthData(cognitoUser);
+        }
+        // Redirect to patient dashboard
+        window.location.href = './patient-dashboard.html';
+        return;
+      }
+
+      authCard.classList.add('hidden');
+      appCard.classList.remove('hidden');
+      pill.textContent = freshUser.name + ' · ' + freshUser.role;
+
+      if (freshUser.role === 'doctor') listTitle.textContent = 'All Patient Documents';
+      if (freshUser.role === 'admin') listTitle.textContent = 'All Documents (Admin)';
+
       profileNote.value = freshUser.profileNote || '';
 
       if (healthSection) {
-        if (freshUser.role === 'patient') {
-          healthSection.classList.remove('hidden');
-          prefillHealthForm(freshUser);
-        } else {
-          healthSection.classList.add('hidden');
-        }
-      }
-
-      // Sync pending health data if patient
-      if (cognitoUser && freshUser.role === 'patient') {
-        await syncPendingHealthData(cognitoUser);
+        healthSection.classList.add('hidden');
       }
 
       renderDocuments();
@@ -603,17 +833,6 @@
       signInBtn.disabled = true;
       signInBtn.textContent = 'Signing in...';
 
-      // Calculate SECRET_HASH for authentication
-      const secretHash = await calculateSecretHash(email);
-      
-      const authenticationData = {
-        Username: email,
-        Password: password
-      };
-      
-      // Note: The amazon-cognito-identity-js SDK doesn't directly support SECRET_HASH
-      // We'll need to use direct API calls for authentication if client secret is required
-      const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
       const userData = {
         Username: email,
         Pool: userPool
@@ -621,168 +840,138 @@
       const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
 
       try {
-        // If client secret is configured, use direct API call for authentication
+        // Check if client secret is configured - if so, use manual SRP with SECRET_HASH
         if (COGNITO_CONFIG.ClientSecret && COGNITO_CONFIG.ClientSecret !== 'YOUR_CLIENT_SECRET') {
-          // Use direct API call for InitiateAuth with SECRET_HASH
-          const authParams = {
-            ClientId: COGNITO_CONFIG.ClientId,
-            AuthFlow: 'USER_PASSWORD_AUTH',
-            AuthParameters: {
-              USERNAME: email,
-              PASSWORD: password,
-              SECRET_HASH: secretHash
-            }
-          };
-          
-          const response = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
-            method: 'POST',
-            headers: {
-              'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth',
-              'Content-Type': 'application/x-amz-json-1.1'
-            },
-            body: JSON.stringify(authParams)
-          });
-          
-          const authResult = await response.json();
-          
-          if (!response.ok) {
-            const errorType = authResult.__type || '';
-            const errorMessage = authResult.message || 'Sign in failed';
-            
-            if (errorType.includes('NotAuthorizedException')) {
-              throw { code: 'NotAuthorizedException', message: 'Incorrect email or password.' };
-            } else if (errorType.includes('UserNotConfirmedException')) {
-              throw { code: 'UserNotConfirmedException', message: 'Please verify your email first.' };
-            } else {
-              throw { code: errorType, message: errorMessage };
-            }
-          }
-          
-          // Extract tokens from response
-          const accessToken = authResult.AuthenticationResult.AccessToken;
-          const idToken = authResult.AuthenticationResult.IdToken;
-          
-          // Get user attributes using GetUser API
-          const getUserParams = {
-            AccessToken: accessToken
-          };
-          
-          const getUserResponse = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
-            method: 'POST',
-            headers: {
-              'X-Amz-Target': 'AWSCognitoIdentityProviderService.GetUser',
-              'Content-Type': 'application/x-amz-json-1.1'
-            },
-            body: JSON.stringify(getUserParams)
-          });
-          
-          const getUserResult = await getUserResponse.json();
-          
-          // Extract attributes
-          const attrs = {};
-          if (getUserResult.UserAttributes) {
-            getUserResult.UserAttributes.forEach(attr => {
-              attrs[attr.Name] = attr.Value;
-            });
-          }
-          
-          // Get role from localStorage or default to 'patient'
-          let allUsers = getUsers();
-          const existingUser = allUsers.find(u => u.email === (attrs.email || email));
-          
-          const user = {
-            id: attrs.email || email,
-            email: attrs.email || email,
-            name: attrs.name || email,
-            role: existingUser?.role || 'patient', // Get role from localStorage
-            profileNote: existingUser?.profileNote || '',
-            idToken,
-            accessToken
-          };
-          
-          // Store in localStorage
-          allUsers = getUsers();
-          const existingIndex = allUsers.findIndex(u => u.email === user.email);
-          if (existingIndex >= 0) {
-            allUsers[existingIndex] = { ...allUsers[existingIndex], ...user };
-          } else {
-            allUsers.push(user);
-          }
-          setUsers(allUsers);
-          setCurrentUser(user);
-          
-          await updateUIForUser(user, cognitoUser);
-          return;
-        }
-        
-        // Fallback to SDK method if no client secret
-        await new Promise((resolve, reject) => {
-          cognitoUser.authenticateUser(authenticationDetails, {
-            onSuccess: async (result) => {
-              try {
-                const idToken = result.getIdToken().getJwtToken();
-                const accessToken = result.getAccessToken().getJwtToken();
-                
-                // Get user attributes
-                const attrs = await getCognitoUserAttributes(cognitoUser);
-                
-                // Get role from localStorage or default to 'patient'
-                let allUsers = getUsers();
-                const existingUser = allUsers.find(u => u.email === attrs.email);
-                
-                const user = {
-                  id: attrs.email,
-                  email: attrs.email,
-                  name: attrs.name || attrs.email,
-                  role: existingUser?.role || 'patient',
-                  profileNote: existingUser?.profileNote || '',
-                  idToken,
-                  accessToken
-                };
+          // Manual SRP authentication with SECRET_HASH support
+          await authenticateWithSRPAndSecretHash(email, password, cognitoUser);
 
-                // Store in localStorage
-                allUsers = getUsers();
-                const existingIndex = allUsers.findIndex(u => u.email === user.email);
-                if (existingIndex >= 0) {
-                  allUsers[existingIndex] = { ...allUsers[existingIndex], ...user };
-                } else {
-                  allUsers.push(user);
+        } else {
+          // Use SDK's authenticateUser method (no client secret)
+          const authenticationData = {
+            Username: email,
+            Password: password
+          };
+          const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
+          
+          await new Promise((resolve, reject) => {
+            cognitoUser.authenticateUser(authenticationDetails, {
+              onSuccess: async (result) => {
+                try {
+                  const idToken = result.getIdToken().getJwtToken();
+                  const accessToken = result.getAccessToken().getJwtToken();
+                  
+                  // Get user attributes
+                  const attrs = await getCognitoUserAttributes(cognitoUser);
+                  
+                  // Get role from localStorage or default to 'patient'
+                  let allUsers = getUsers();
+                  const existingUser = allUsers.find(u => u.email === attrs.email);
+                  
+                  const user = {
+                    id: attrs.email,
+                    email: attrs.email,
+                    name: attrs.name || attrs.email,
+                    role: existingUser?.role || 'patient',
+                    profileNote: existingUser?.profileNote || '',
+                    idToken,
+                    accessToken
+                  };
+
+                  // Store in localStorage
+                  allUsers = getUsers();
+                  const existingIndex = allUsers.findIndex(u => u.email === user.email);
+                  if (existingIndex >= 0) {
+                    allUsers[existingIndex] = { ...allUsers[existingIndex], ...user };
+                  } else {
+                    allUsers.push(user);
+                  }
+                  setUsers(allUsers);
+                  setCurrentUser(user);
+
+                  await updateUIForUser(user, cognitoUser);
+                  resolve();
+                } catch (err) {
+                  reject(err);
                 }
-                setUsers(allUsers);
-                setCurrentUser(user);
-
-                await updateUIForUser(user, cognitoUser);
-                resolve();
-              } catch (err) {
-                reject(err);
+              },
+              onFailure: (err) => {
+                handleAuthError(err, reject);
+              },
+              newPasswordRequired: (userAttributes, requiredAttributes) => {
+                reject(new Error('New password required. Please reset your password.'));
               }
-            },
-            onFailure: (err) => {
-              reject(err);
-            },
-            newPasswordRequired: (userAttributes, requiredAttributes) => {
-              // Handle new password requirement
-              reject(new Error('New password required. Please reset your password.'));
-            }
+            });
           });
-        });
+        }
       } catch (error) {
         signInBtn.disabled = false;
         signInBtn.textContent = originalBtnText;
         
+        // Log full error for debugging
+        console.error('Sign in error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        
         let errorMessage = 'Sign in failed. ';
-        if (error.code === 'NotAuthorizedException') {
-          errorMessage += 'Incorrect email or password.';
-        } else if (error.code === 'UserNotConfirmedException') {
-          errorMessage += 'Please verify your email first.';
-          // Show verification code section
+        let showVerificationSection = false;
+        
+        // Check error code and message more thoroughly
+        const errorCode = error.code || error.name || '';
+        const errorMsg = (error.message || '').toLowerCase();
+        const fullError = JSON.stringify(error).toLowerCase();
+        
+        // Check for email verification requirement
+        if (errorCode === 'UserNotConfirmedException' || 
+            errorMsg.includes('not confirmed') || 
+            errorMsg.includes('verify') ||
+            fullError.includes('usernotconfirmed')) {
+          errorMessage += 'Please verify your email first. Check your inbox for a verification code.';
+          showVerificationSection = true;
           pendingCognitoUser = cognitoUser;
-          document.getElementById('verificationCodeSection').classList.remove('hidden');
-        } else if (error.message) {
-          errorMessage += error.message;
-        } else {
-          errorMessage += 'Please try again.';
+        } 
+        // Check for wrong credentials
+        else if (errorCode === 'NotAuthorizedException' || 
+                 errorMsg.includes('not authorized') ||
+                 errorMsg.includes('incorrect') ||
+                 fullError.includes('notauthorized')) {
+          errorMessage += 'Incorrect email or password. Please check:\n';
+          errorMessage += '1. Your email address is correct\n';
+          errorMessage += '2. Your password is correct\n';
+          errorMessage += '3. You have verified your email (check your inbox)\n';
+          errorMessage += '\nCheck the browser console (F12) for more details.';
+        } 
+        // Check for user not found
+        else if (errorCode === 'UserNotFoundException' || 
+                 errorMsg.includes('not found') ||
+                 fullError.includes('usernotfound')) {
+          errorMessage += 'No account found with this email address. Please sign up first.';
+        } 
+        // Check for invalid parameters
+        else if (errorCode === 'InvalidParameterException' || 
+                 errorMsg.includes('invalid parameter')) {
+          errorMessage += 'Invalid email or password format. Please check your input.';
         }
+        // Generic error - show actual message
+        else if (error.message) {
+          errorMessage += error.message;
+          // Also log to console for debugging
+          if (error.originalError) {
+            console.error('Original error:', error.originalError);
+          }
+        } 
+        // Unknown error
+        else {
+          errorMessage += 'An unexpected error occurred. ';
+          errorMessage += 'Please check:\n';
+          errorMessage += '1. Your email is verified (check your inbox)\n';
+          errorMessage += '2. Your credentials are correct\n';
+          errorMessage += '3. Check the browser console (F12) for error details';
+        }
+        
+        // Show verification section if needed
+        if (showVerificationSection) {
+          document.getElementById('verificationCodeSection').classList.remove('hidden');
+        }
+        
         alert(errorMessage);
       }
     });
