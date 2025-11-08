@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Patient workspace</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="card" style="margin-bottom: 24px;">
+        <div class="section-header">
+          <div>
+            <h1>Patient workspace</h1>
+            <p class="helper-text">Signed in as <span id="userEmail"></span></p>
+          </div>
+          <button type="button" class="secondary" id="signOutBtn">Sign out</button>
+        </div>
+      </header>
+
+      <section class="section" aria-labelledby="findDoctorHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="findDoctorHeading">Find a doctor</h2>
+            <p class="helper-text">Filter by specialty, location or language.</p>
+          </div>
+        </div>
+        <form id="doctorSearchForm" class="layout-grid two-col" novalidate>
+          <label>
+            Specialty
+            <input type="text" name="specialty" placeholder="Dermatology" />
+          </label>
+          <label>
+            Location
+            <input type="text" name="location" placeholder="Seattle" />
+          </label>
+          <label>
+            Language
+            <input type="text" name="language" placeholder="English" />
+          </label>
+          <div>
+            <button type="submit">Search</button>
+          </div>
+        </form>
+        <div class="list" id="doctorResults" role="list"></div>
+      </section>
+
+      <section class="section" aria-labelledby="appointmentsHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="appointmentsHeading">My appointments</h2>
+            <p class="helper-text">Track pending and confirmed bookings.</p>
+          </div>
+        </div>
+        <div class="list" id="appointmentsList" role="list"></div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="bookingTitle">
+      <div class="modal" id="bookingModal">
+        <div class="section-header">
+          <h2 id="bookingTitle">Book appointment</h2>
+          <button type="button" class="secondary" data-close-modal>&times;</button>
+        </div>
+        <p class="helper-text">Booking with <strong id="selectedDoctor"></strong></p>
+        <form id="bookingForm" class="layout-grid" novalidate>
+          <label>
+            Date
+            <input type="date" name="appointmentDate" required />
+          </label>
+          <label>
+            Time (24-hour)
+            <input type="time" name="appointmentTime" required />
+          </label>
+          <label>
+            Reason (optional)
+            <textarea name="reason" rows="3" placeholder="Symptoms or context"></textarea>
+          </label>
+          <div class="layout-grid two-col">
+            <button type="submit">Request appointment</button>
+            <button type="button" class="secondary" data-close-modal>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script type="module" src="./assets/patient.js"></script>
+  </body>
+</html>
