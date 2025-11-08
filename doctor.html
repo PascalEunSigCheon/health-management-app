@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Doctor workspace</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="card" style="margin-bottom: 24px;">
+        <div class="section-header">
+          <div>
+            <h1>Doctor workspace</h1>
+            <p class="helper-text">Signed in as <span id="userEmail"></span></p>
+          </div>
+          <button type="button" class="secondary" id="signOutBtn">Sign out</button>
+        </div>
+      </header>
+
+      <section class="layout-grid two-col" style="gap: 24px;">
+        <div class="section" aria-labelledby="pendingHeading">
+          <div class="section-header">
+            <div>
+              <h2 id="pendingHeading">Incoming requests</h2>
+              <p class="helper-text">Confirm or decline pending appointments.</p>
+            </div>
+          </div>
+          <div class="list" id="pendingRequests" role="list"></div>
+        </div>
+        <div class="section" aria-labelledby="scheduleHeading">
+          <div class="section-header">
+            <div>
+              <h2 id="scheduleHeading">My schedule</h2>
+              <p class="helper-text">Confirmed appointments</p>
+            </div>
+          </div>
+          <div class="list" id="confirmedSchedule" role="list"></div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="summaryHeading" style="margin-top: 24px;">
+        <div class="section-header">
+          <div>
+            <h2 id="summaryHeading">Patient health summary</h2>
+            <p class="helper-text">Select an appointment to view the patient's latest health index.</p>
+          </div>
+        </div>
+        <div class="list" id="healthSummary"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./assets/doctor.js"></script>
+  </body>
+</html>
