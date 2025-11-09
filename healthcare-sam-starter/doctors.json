@@ -1,34 +1,38 @@
 [
   {
-    "email": "doc.cardio@example.com",
+    "userId": "doctor-001",
+    "email": "alice.cardio@example.com",
     "firstName": "Alice",
     "lastName": "Cardio",
     "specialty": "Cardiology",
     "languages": ["English", "French"],
-    "city": "Paris"
+    "location": "Paris"
   },
   {
-    "email": "doc.derm@example.com",
+    "userId": "doctor-002",
+    "email": "ben.derm@example.com",
     "firstName": "Ben",
     "lastName": "Derm",
     "specialty": "Dermatology",
-    "languages": ["French, English"],
-    "city": "Lyon"
+    "languages": ["English"],
+    "location": "Lyon"
   },
   {
-    "email": "doc.neuro@example.com",
+    "userId": "doctor-003",
+    "email": "nina.neuro@example.com",
     "firstName": "Nina",
     "lastName": "Neuro",
     "specialty": "Neurology",
     "languages": ["English"],
-    "city": "Marseille"
+    "location": "Marseille"
   },
   {
-    "email": "doc.pulm@example.com",
+    "userId": "doctor-004",
+    "email": "paul.pulm@example.com",
     "firstName": "Paul",
     "lastName": "Pulmo",
     "specialty": "Pulmonology",
     "languages": ["French"],
-    "city": "Paris"
+    "location": "Paris"
   }
 ]

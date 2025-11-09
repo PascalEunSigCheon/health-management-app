@@ -49,17 +49,12 @@ Resources:
       Auth:
         Authorizers:
           CognitoAuthorizer:
-            # REQUIRED for HttpApi JWT authorizers:
             IdentitySource: "$request.header.Authorization"
             JwtConfiguration:
               audience:
                 - !Ref CognitoUserPoolClient
               issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}"
-            # Optional; keep if you use OAuth scopes in Cognito:
-            AuthorizationScopes:
-              - email
         DefaultAuthorizer: CognitoAuthorizer
-
   ApiAccessLog:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -269,19 +264,41 @@ Resources:
     Properties:
       CodeUri: functions/auth_post_confirm/
       Handler: app.lambda_handler
+      Runtime: python3.11         # or your global default
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          USERS_TABLE_NAME: !Ref UsersTable
       Policies:
+        # Write to Users table
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
               Resource: !GetAtt UsersTable.Arn
+        # NEW: allow adding to Cognito group
+        - Statement:
+            Effect: Allow
+            Action:
+              - cognito-idp:AdminAddUserToGroup
+            Resource: "*"
+        # (optional) logs
+        - Statement:
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: "*"
       Events:
         PostConfirmation:
           Type: Cognito
           Properties:
             UserPool: !Ref CognitoUserPool
             Trigger: PostConfirmation
+
 
   DoctorsGetFunction:
     Type: AWS::Serverless::Function

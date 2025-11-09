@@ -70,7 +70,7 @@ To pre-populate the Users table with doctor profiles:
 
 ```bash
 python scripts/seed_doctors.py --table $(aws cloudformation describe-stacks \
-  --stack-name health-management-dev \
+  --stack-name sam-app \
   --query 'Stacks[0].Outputs[?OutputKey==`UsersTableName`].OutputValue' \
   --output text)
 ```

@@ -340,3 +340,11 @@ export function groupLabel(groups) {
 export function getUserEmail() {
   return getSession()?.email || "";
 }
+
+const groupsClaim = payload["cognito:groups"];
+let normalizedGroups = Array.isArray(groupsClaim)
+  ? groupsClaim
+  : (groupsClaim ? String(groupsClaim).split(",").filter(Boolean) : []);
+if (normalizedGroups.length === 0 && payload["custom:role"]) {
+  normalizedGroups = [String(payload["custom:role"]).toUpperCase()];
+}
