@@ -12,7 +12,7 @@ PARENT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
 if PARENT_DIR not in sys.path:
     sys.path.append(PARENT_DIR)
 
-from common import appointments_table, get_claim, json_response, require_role  # noqa: E402
+from common import appointments_table, get_claim, json_response, require_role, users_table  # noqa: E402
 
 
 def parse_since(value: Optional[str]) -> Optional[str]:
@@ -35,6 +35,7 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
 
     params = event.get("queryStringParameters") or {}
     since = parse_since(params.get("since"))
+    status_filter = (params.get("status") or "").upper()
 
     key_condition = Key("doctorId").eq(doctor_id)
     if since:
@@ -46,4 +47,25 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
         ScanIndexForward=True,
     )
 
-    return json_response({"items": result.get("Items", [])})
+    items = result.get("Items", [])
+    if status_filter:
+        items = [item for item in items if item.get("status", "").upper() == status_filter]
+
+    items.sort(key=lambda record: record.get("slotISO", ""))
+
+    # Populate patient email if missing (legacy records)
+    missing_patient_ids = [item["patientId"] for item in items if not item.get("patientEmail")]
+    unique_ids = list({pid for pid in missing_patient_ids})
+    if unique_ids:
+        for patient_id in unique_ids:
+            try:
+                patient = users_table.get_item(Key={"userId": patient_id}).get("Item")
+            except Exception:  # pylint: disable=broad-except
+                patient = None
+            if not patient:
+                continue
+            for record in items:
+                if record.get("patientId") == patient_id and not record.get("patientEmail"):
+                    record["patientEmail"] = patient.get("email")
+
+    return json_response({"items": items})

@@ -8,6 +8,7 @@ import {
   validateEmail,
   validateStrongPassword,
 } from "./app.js";
+import { LANGUAGE_OPTIONS, LOCATION_OPTIONS, SPECIALTIES } from "./constants.js";
 
 let pendingEmail = "";
 
@@ -24,21 +25,70 @@ function clearErrors() {
   });
 }
 
-function toggleDoctorFields(role) {
-  const section = document.querySelector("#doctorFields");
-  section.hidden = role !== "DOCTOR";
-  section.querySelectorAll("input").forEach((input) => {
-    if (input.name === "languages") {
-      input.required = false;
-    } else {
-      input.required = role === "DOCTOR";
-    }
+function populateOptions(select, values) {
+  select.innerHTML = `${select.name !== "languages" ? '<option value="">Select</option>' : ""}`;
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
   });
 }
 
-function validateForm(form) {
+function populateLanguages(select) {
+  select.innerHTML = "";
+  LANGUAGE_OPTIONS.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  });
+}
+
+function toggleDoctorFields(role) {
+  const section = document.querySelector("#doctorFields");
+  const shouldShow = role === "DOCTOR";
+  section.hidden = !shouldShow;
+  section.querySelectorAll("select").forEach((select) => {
+    select.required = shouldShow;
+  });
+  if (!shouldShow) {
+    section.querySelectorAll("select").forEach((select) => {
+      if (select.multiple) {
+        Array.from(select.options).forEach((option) => {
+          option.selected = false;
+        });
+      } else {
+        select.value = "";
+      }
+    });
+  }
+}
+
+function selectedLanguages(select) {
+  return Array.from(select.selectedOptions).map((option) => option.value);
+}
+
+function validateDoctorFields(form) {
   let valid = true;
+  if (!form.specialty.value) {
+    setError("specialty", "Select a specialty");
+    valid = false;
+  }
+  if (!form.city.value) {
+    setError("city", "Select a city");
+    valid = false;
+  }
+  if (!selectedLanguages(form.languages).length) {
+    setError("languages", "Select at least one language");
+    valid = false;
+  }
+  return valid;
+}
+
+function validateForm(form) {
   clearErrors();
+  let valid = true;
   if (!form.firstName.value.trim()) {
     setError("firstName", "Enter your first name");
     valid = false;
@@ -60,14 +110,7 @@ function validateForm(form) {
     valid = false;
   }
   if (form.role.value === "DOCTOR") {
-    if (!form.specialty.value.trim()) {
-      setError("specialty", "Enter a specialty");
-      valid = false;
-    }
-    if (!form.location.value.trim()) {
-      setError("location", "Enter a location");
-      valid = false;
-    }
+    valid = validateDoctorFields(form) && valid;
   }
   return valid;
 }
@@ -126,6 +169,9 @@ async function handleResend() {
 function attachEvents() {
   const form = document.querySelector("#signupForm");
   const submitBtn = document.querySelector("#signupBtn");
+  populateOptions(form.specialty, SPECIALTIES);
+  populateOptions(form.city, LOCATION_OPTIONS);
+  populateLanguages(form.languages);
   form.role.addEventListener("change", () => toggleDoctorFields(form.role.value));
   toggleDoctorFields(form.role.value);
   form.addEventListener("submit", (event) => {

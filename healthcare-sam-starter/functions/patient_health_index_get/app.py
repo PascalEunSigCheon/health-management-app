@@ -29,4 +29,9 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
         KeyConditionExpression=Key("patientId").eq(patient_id)
     )
 
-    return json_response({"items": response.get("Items", [])})
+    items = response.get("Items", [])
+    for item in items:
+        if "summary" in item and "metrics" not in item:
+            item["metrics"] = item.pop("summary")
+
+    return json_response({"items": items})

@@ -2,10 +2,7 @@ import json
 import logging
 import os
 from datetime import datetime
-import json
-import logging
-import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 import boto3
 
@@ -24,6 +21,8 @@ def json_response(body: Dict[str, Any], status_code: int = 200) -> Dict[str, Any
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Authorization,Content-Type",
         },
         "body": json.dumps(body),
     }
@@ -34,11 +33,15 @@ def get_claim(event: Dict[str, Any], key: str) -> Optional[str]:
     return claims.get(key)
 
 
+def get_groups(event: Dict[str, Any]) -> Set[str]:
+    raw = get_claim(event, "cognito:groups") or ""
+    return {value.strip() for value in raw.split(",") if value.strip()}
+
+
 def require_role(event: Dict[str, Any], allowed_roles: list[str]) -> Optional[Dict[str, Any]]:
-    groups = get_claim(event, "cognito:groups")
-    if not groups:
+    group_set = get_groups(event)
+    if not group_set:
         return json_response({"message": "forbidden"}, 403)
-    group_set = {g.strip() for g in groups.split(",")}
     if not group_set.intersection(set(allowed_roles)):
         return json_response({"message": "forbidden"}, 403)
     return None
@@ -56,7 +59,8 @@ def emit_event(event_type: str, appointment: Dict[str, Any]) -> None:
         "doctorId": appointment.get("doctorId"),
         "slotISO": appointment.get("slotISO"),
         "status": appointment.get("status"),
-        "reason": appointment.get("reason"),
+        "reasonCode": appointment.get("reasonCode"),
+        "recommendedSpecialty": appointment.get("recommendedSpecialty"),
         "ts": datetime.utcnow().isoformat(),
     }
     events_client.put_events(

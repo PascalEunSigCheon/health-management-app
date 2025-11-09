@@ -1,132 +1,188 @@
-# Health Management Demo
+# Health Management Demo Portal
 
-A lightweight Doctolib-style experience showing patient intake, role-based dashboards, and DynamoDB-backed appointment flows. The static frontend talks directly to the deployed AWS SAM backend that powers Cognito auth, doctor discovery, and appointment orchestration.
+A Cognito-protected, Doctolib-style prototype that lets patients log their symptoms, capture vitals through guided dropdowns, discover doctors, and book appointments. Doctors manage incoming requests, confirm or decline, and view the latest patient vitals sourced from DynamoDB.
 
-## Prerequisites
+## At a glance
 
-- Node-free environment (vanilla HTML/CSS/JS only).
-- AWS CLI configured for the target account/region (`eu-west-3`).
-- Cognito user pool and HTTP API already deployed (see `config.json`).
+- **Patient experience**: problem-first triage flow with mandatory + problem-specific vitals, specialty recommendation, doctor discovery, booking, cancellations, and a live vitals snapshot.
+- **Doctor workspace**: pending requests vs confirmed schedule, one-click confirm/decline, and protected vitals retrieval tied to appointment authorization.
+- **Architecture**: static HTML/CSS/JS frontend, AWS Cognito for auth, API Gateway + Lambda microservices, and DynamoDB tables for users, appointments, and patient health metrics.
 
-## 1. Configure the frontend
+---
 
-1. Update [`config.json`](./config.json) if stack outputs change. The current values map to:
+## 1. Prerequisites
 
-   ```json
-   {
-     "apiBaseUrl": "https://jxwfu7p6jg.execute-api.eu-west-3.amazonaws.com/v1",
-     "region": "eu-west-3",
-     "userPoolId": "eu-west-3_qHf4LOBNa",
-     "userPoolClientId": "3scslu2a91ae8en1v93r1225uv",
-     "doctorMatchEndpoint": ""
-   }
-   ```
+| Requirement | Notes |
+| --- | --- |
+| AWS CLI v2 | Authenticated against the target account (region: `eu-west-3`). |
+| Python 3.11 | Used for local static hosting and seed scripts. |
+| Deployed SAM stack | The backend is already live. Refer to the CloudFormation outputs below. |
 
-2. Run a local static server:
+### CloudFormation outputs (current environment)
 
-   ```bash
-   python -m http.server 8080
-   # visit http://localhost:8080
-   ```
+```json
+{
+  "apiBaseUrl": "https://jxwfu7p6jg.execute-api.eu-west-3.amazonaws.com/v1",
+  "region": "eu-west-3",
+  "userPoolId": "eu-west-3_qHf4LOBNa",
+  "userPoolClientId": "3scslu2a91ae8en1v93r1225uv",
+  "doctorMatchEndpoint": ""
+}
+```
 
-## 2. Seed users (CLI)
+Update [`config.json`](./config.json) if these values change.
 
-No SMS or MFA is enabled; create test users via the AWS CLI (email verification suppressed for rapid testing).
+---
+
+## 2. Run the frontend locally
+
+```bash
+python -m http.server 8080
+# Visit http://localhost:8080
+```
+
+The site is framework-free and can run from any static host as long as `config.json` is present alongside the HTML files.
+
+---
+
+## 3. Demo accounts & seeding
+
+The repository bundles curated demo users covering multiple specialties, languages, and cities.
+
+- **Default password for all demo accounts:** `HealthPass!1`
+- Credentials are listed in [`demo/CREDS.md`](./demo/CREDS.md).
+- Doctor metadata (specialty, languages, location, availability slots) is provisioned automatically during sign-up via Cognito custom attributes.
+
+### Option A – self sign-up (recommended for UI demos)
+
+1. Open [`signup.html`](./signup.html).
+2. Complete the form:
+   - Choose **Patient** or **Doctor**.
+   - Doctors must pick specialty, languages, and location from dropdowns; availability slots are generated automatically (Mon–Fri, 09:00–17:00, 30 minute increments for the next 14 days).
+3. Confirm the code emailed by Cognito.
+4. Sign in from [`signin.html`](./signin.html).
+
+### Option B – seed via CLI (no email required)
 
 ```bash
 USER_POOL_ID=eu-west-3_qHf4LOBNa
-CLIENT_ID=3scslu2a91ae8en1v93r1225uv
+DEFAULT_PASSWORD='HealthPass!1'
 
-# Doctor example (Cardiology)
+# Doctor example (Cardiology, Paris)
 aws cognito-idp admin-create-user \
   --user-pool-id "$USER_POOL_ID" \
   --username doc.cardio@example.com \
-  --user-attributes Name="given_name",Value="Alice" Name="family_name",Value="Cardio" Name="custom:role",Value="DOCTOR" \
+  --user-attributes \
+    Name="given_name",Value="Alice" \
+    Name="family_name",Value="Cardio" \
+    Name="custom:role",Value="DOCTOR" \
+    Name="custom:specialty",Value="Cardiology" \
+    Name="custom:languages",Value="English,French" \
+    Name="custom:location",Value="Paris" \
+    Name="custom:availability",Value='[]' \
   --message-action SUPPRESS
 aws cognito-idp admin-set-user-password \
   --user-pool-id "$USER_POOL_ID" \
   --username doc.cardio@example.com \
-  --password "DoctorPass!1" \
+  --password "$DEFAULT_PASSWORD" \
   --permanent
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id "$USER_POOL_ID" \
+  --username doc.cardio@example.com \
+  --group-name DOCTOR
 
 # Patient example
 aws cognito-idp admin-create-user \
   --user-pool-id "$USER_POOL_ID" \
   --username patient.one@example.com \
-  --user-attributes Name="given_name",Value="Pat" Name="family_name",Value="One" Name="custom:role",Value="PATIENT" \
+  --user-attributes \
+    Name="given_name",Value="Pat" \
+    Name="family_name",Value="One" \
+    Name="custom:role",Value="PATIENT" \
   --message-action SUPPRESS
 aws cognito-idp admin-set-user-password \
   --user-pool-id "$USER_POOL_ID" \
   --username patient.one@example.com \
-  --password "PatientPass!1" \
+  --password "$DEFAULT_PASSWORD" \
   --permanent
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id "$USER_POOL_ID" \
+  --username patient.one@example.com \
+  --group-name PATIENT
 ```
 
-### Doctor profile bootstrap
-
-Doctor metadata (specialty, languages, city, availability slots) is provisioned via the Cognito post-confirmation trigger using the `clientMetadata` payload sent from the sign-up form. For existing accounts—or if you prefer explicit CLI seeding—update the DynamoDB record directly:
+To backfill doctor profiles in DynamoDB for legacy users, run:
 
 ```bash
-USERS_TABLE=health-users-dev
-aws dynamodb update-item \
-  --table-name "$USERS_TABLE" \
-  --key '{"userId": {"S": "<doctor-sub>"}}' \
-  --update-expression 'SET doctorProfile = :profile' \
-  --expression-attribute-values '{":profile": {"M": {"specialty": {"S": "Cardiology"}, "city": {"S": "Paris"}, "languages": {"L": [{"S": "English"}, {"S": "French"}]}, "availSlots": {"L": []}}}}'
+python healthcare-sam-starter/scripts/seed_doctors.py \
+  --table health-users-dev \
+  --input assets/demo-data/doctors.json
 ```
 
-> Tip: the repository ships with [`assets/demo-data/doctors.json`](./assets/demo-data/doctors.json). Use it as a source of truth when scripting seeds.
+Patients can be loaded similarly:
 
-## 3. Doctor availability slots
+```bash
+python healthcare-sam-starter/scripts/seed_patients.py \
+  --table health-users-dev \
+  --input assets/demo-data/patients.json
+```
 
-Slots are generated client-side for the next 14 business days (Mon–Fri, 09:00–17:00 in 30-minute increments) and stored alongside the doctor profile in DynamoDB. Update via the CLI example above or by signing up through the UI as a doctor.
+> **Tip:** Append `?demo=1` to the patient workspace URL while signed in to reveal a “Load demo data” button. It attempts to call `/admin/seed/doctors` (available only in trusted dev environments) and falls back with CLI guidance when disabled.
 
-## 4. Frontend walkthrough
+---
 
-### Sign in / Sign up
+## 4. Product walkthrough
 
-- Sign-up enforces strong passwords and role selection.
-- Doctors choose specialty, languages, and city from curated dropdowns. Data flows to DynamoDB via Cognito `clientMetadata`—no custom Cognito attributes beyond `custom:role`.
-- After email confirmation, sign in via `signin.html`. Sessions persist in `localStorage` with automatic expiry handling.
+### Sign up / Sign in
+
+- Strong passwords enforced (≥8 chars, upper/lowercase, digit, symbol).
+- Role selection drives the landing page (patient → `patient.html`, doctor → `doctor.html`).
+- Sessions persist in `localStorage` with expiry checks; the **Sign out** button clears tokens client-side and calls Cognito’s logout.
 
 ### Patient workspace (`patient.html`)
 
-1. **Prepare your visit**
-   - Select a chief complaint from controlled options (e.g., “Chest pain”, “Fever/cold/flu”).
-   - Mandatory vitals: height, weight, blood pressure (systolic/diastolic), heart rate.
-   - Complaint-specific vitals appear dynamically (e.g., cholesterol panel for cardiology, smoking status for pulmonology).
-   - Known allergies are a multi-select list; selecting “Other” reveals a controlled text input.
-   - Medications field accepts sanitized free text (no HTML injection).
-   - BMI auto-calculates after entering height and weight.
-
-2. **Find doctors**
-   - Recommended specialty is derived from the complaint.
-   - Optional filters for city and language apply on top of the specialty.
-   - Doctor cards display specialty, location, languages, and up to 12 future slots as selectable chips.
-
-3. **Book appointment**
-   - Choose a slot chip then press **Book appointment**.
-   - Appointment status starts as `PENDING`.
-   - My Appointments panel lists bookings with status badges and a cancel action for pending/confirmed entries.
-   - Latest submitted vitals section pulls from the PatientHealthIndex table for quick reference.
+1. **Problem selection & vitals**
+   - Problems are limited to curated options: Cardiac symptoms, Dermatological issue, Respiratory issue, Gastrointestinal issue, Musculoskeletal, Neurological, General checkup.
+   - Mandatory vitals for everyone: Height (cm), Weight (kg), Temperature (°C).
+   - Each problem dynamically reveals additional required vitals (e.g. blood pressure + cholesterol for Cardiac, SpO₂ + respiratory rate for Respiratory).
+   - Specialty recommendation auto-selects the matching specialty but can be overridden via dropdown.
+2. **Doctor discovery**
+   - Filters cover specialty (pre-selected), city (Paris, Lyon, Marseille, Toulouse, Nice, Virtual), and language (English, French, German, Spanish, Italian).
+   - Doctor cards list specialty, location, languages, and a slot dropdown (future slots only; seeded availability is 30-minute blocks across the next 14 weekdays).
+3. **Booking & management**
+   - Booking payloads are validated client-side to ensure vitals completeness and future slots.
+   - Appointments start as `PENDING`; status badges update when the doctor responds.
+   - Patients can cancel `PENDING` or `CONFIRMED` bookings.
+4. **Vitals snapshot**
+   - The “Latest submitted vitals” card pulls the `latest` record from the PatientHealthIndex table and renders key-value pairs.
 
 ### Doctor workspace (`doctor.html`)
 
-- Tabs split `Pending requests` and `My schedule` (confirmed appointments).
-- Cards highlight chief complaint, recommended specialty, allergies, and BMI.
-- Confirm/Decline actions update DynamoDB and emit analytics events.
-- Selecting any card fetches the patient’s health summary via `/patient/{patientId}/health/summary` (read-only).
-- Auto-refresh runs every 10 seconds (polling). The last refreshed time appears as a badge.
+- Tabs segment **Pending requests** (default) and **My schedule** (confirmed appointments).
+- Each card shows patient email (or anonymized ID), requested slot, and reason label. Confirm/Decline buttons update DynamoDB and emit analytics events.
+- “View vitals” (or selecting the card) calls `GET /patient-health/{patientId}/latest?appointmentId=...`. Doctors only receive data for appointments they own with status `PENDING` or `CONFIRMED`.
+- Auto-refresh every 10 seconds keeps the dashboard current; the badge reflects the last update time in 24-hour format.
 
-### Inline validation & accessibility
+---
 
-- All actionable controls include keyboard focus styles and ARIA labelling where applicable.
-- Error messages render inline under their respective inputs.
-- Buttons show `aria-busy="true"` during async calls for screen-reader hints.
+## 5. API quick reference
 
-## 5. Deploy the static site to S3
+| Endpoint | Method | Role | Notes |
+| --- | --- | --- | --- |
+| `/doctors?specialty=&city=&language=` | GET | Patient / Doctor | Returns doctor profiles with languages as arrays. |
+| `/appointments` | POST | Patient | Books a pending appointment (`reasonCode`, `vitals`, `recommendedSpecialty`, `slotISO`). |
+| `/appointments/patient` | GET | Patient | Lists patient appointments (sorted by creation time desc). |
+| `/appointments/{id}/cancel` | POST | Patient | Cancels a pending/confirmed appointment. |
+| `/appointments/doctor?status=PENDING|CONFIRMED` | GET | Doctor | Doctor’s requests or schedule. Accepts optional `since` ISO filter. |
+| `/appointments/{id}/confirm` | POST | Doctor | Confirms a pending appointment. |
+| `/appointments/{id}/decline` | POST | Doctor | Declines a pending appointment. |
+| `/patient-health/{patientId}/latest?appointmentId=` | GET | Patient / Doctor | Patients fetch their own latest metrics; doctors must supply `appointmentId`. |
 
-Use the stack’s static bucket (`hm-static-site-dev-810278669680`) and keep it simple—no CloudFront automation is required for this task.
+All responses are JSON with CORS headers (`Access-Control-Allow-Origin: *`). Errors return `{ "message": "..." }` with appropriate HTTP status codes for toast display.
+
+---
+
+## 6. Deploy to S3 (static hosting)
 
 ```bash
 aws s3 sync . s3://hm-static-site-dev-810278669680 \
@@ -136,23 +192,31 @@ aws s3 sync . s3://hm-static-site-dev-810278669680 \
 aws s3 website s3://hm-static-site-dev-810278669680 --index-document index.html
 ```
 
-Ensure the bucket policy allows public `GET` access to objects (or front with CloudFront + OAC in production).
-
-## 6. Screenshots (placeholders)
-
-- `docs/screenshots/patient-intake.png` – patient intake form with vitals.
-- `docs/screenshots/doctor-dashboard.png` – doctor pending requests view.
-
-Capture and replace the placeholders when running the UI locally.
-
-## 7. Troubleshooting
-
-- **401/403 errors**: clear `localStorage` or sign out—expired tokens are dropped automatically.
-- **Doctor list empty**: verify doctor profiles contain specialty/city/languages and that availability slots include future timestamps.
-- **Health summary 403**: doctors may only access patient data for appointments where they are the assigned doctor and the status is `PENDING` or `CONFIRMED`.
-- **Time drift**: ensure the client machine clock is accurate; ISO timestamps must be in the future to pass clash checks.
-- **Seeding via UI**: append `?seed=1` to the URL and sign in; the helper attempts to call `/admin/seed/doctors`. In this environment the endpoint is intentionally absent, and the UI will prompt you to run the CLI steps above instead.
+Ensure the bucket policy allows public `GET` access (or front the bucket with CloudFront + OAC in production). Upload `config.json` alongside the HTML files.
 
 ---
 
-_This repository intentionally avoids frontend frameworks to keep the bundle light and deployable on any static host._
+## 7. Troubleshooting checklist
+
+| Symptom | Likely fix |
+| --- | --- |
+| `401 Unauthorized` responses | Session expired. Sign out and back in (clears `localStorage`). |
+| `403 Forbidden` on doctor endpoints | User not in `DOCTOR` group or appointment does not belong to them. Re-check Cognito groups or book a new appointment. |
+| Doctor search empty | Doctor profile missing specialty/city/languages or no future availability. Seed via scripts/CLI and retry. |
+| Booking rejected with “slot not published” | Slot not in doctor’s availability window or already booked. Pick another slot. |
+| Health summary returns empty metrics | Patient has not submitted an intake yet. Book an appointment to create a snapshot. |
+| Time validation failures | Ensure the client machine clock is correct; slots must be in the future in ISO 8601 format. |
+
+---
+
+## 8. Definition of done (self-check)
+
+- [x] Patient can sign up, sign in, choose a problem, enter required vitals, discover doctors, and book a `PENDING` appointment.
+- [x] Doctor sees the pending request, confirms/declines, and the patient list updates accordingly.
+- [x] Doctor accesses patient vitals only for owned appointments with allowed statuses.
+- [x] All structured inputs are dropdowns or numeric controls; no free-text fields for specialties, problems, languages, or locations.
+- [x] README + demo data enable a new contributor to run locally and deploy the static site to S3 without additional guidance.
+
+---
+
+Happy shipping! :rocket:

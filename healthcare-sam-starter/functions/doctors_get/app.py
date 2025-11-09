@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-import json
 import os
 import sys
 from typing import Any, Dict, List
@@ -15,22 +12,28 @@ if PARENT_DIR not in sys.path:
 from common import json_response, require_role, users_table  # noqa: E402
 
 
-FILTER_FIELDS = {
-    "specialty": "specialty",
-    "location": "location",
-    "language": "languages",
-}
-
-
-def build_filter_expression(params: Dict[str, str]):
-    expression = None
-    for key, attr_name in FILTER_FIELDS.items():
-        value = params.get(key)
-        if not value:
-            continue
-        attr_condition = Attr(attr_name).contains(value)
-        expression = attr_condition if expression is None else expression & attr_condition
-    return expression
+def normalise_doctor(item: Dict[str, Any]) -> Dict[str, Any]:
+    profile = item.get("doctorProfile") or {}
+    if not profile:
+        legacy = {
+            "specialty": item.get("specialty"),
+            "languages": item.get("languages"),
+            "city": item.get("location"),
+        }
+        profile = {k: v for k, v in legacy.items() if v}
+    languages = profile.get("languages")
+    if isinstance(languages, str):
+        profile["languages"] = [lang.strip() for lang in languages.split(",") if lang.strip()]
+    profile.setdefault("languages", [])
+    profile.setdefault("availSlots", [])
+    result = {
+        "userId": item.get("userId"),
+        "firstName": item.get("firstName"),
+        "lastName": item.get("lastName"),
+        "email": item.get("email"),
+        "doctorProfile": profile,
+    }
+    return result
 
 
 def lambda_handler(event: Dict[str, Any], _context: Any):
@@ -39,19 +42,23 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
         return forbidden
 
     params = event.get("queryStringParameters") or {}
-    filter_expression = build_filter_expression(params)
-
-    scan_kwargs: Dict[str, Any] = {
-        "FilterExpression": Attr("role").eq("DOCTOR"),
-        "ProjectionExpression": "userId, firstName, lastName, email, specialty, languages, location, createdAt",
-    }
-
-    if filter_expression is not None:
-        scan_kwargs["FilterExpression"] = Attr("role").eq("DOCTOR") & filter_expression
-
-    response = users_table.scan(**scan_kwargs)
+    response = users_table.scan(FilterExpression=Attr("role").eq("DOCTOR"))
     items: List[Dict[str, Any]] = response.get("Items", [])
 
-    items.sort(key=lambda item: item.get("lastName", ""))
+    normalised: List[Dict[str, Any]] = []
+    for item in items:
+        doctor = normalise_doctor(item)
+        profile = doctor["doctorProfile"]
+        specialty = params.get("specialty")
+        city = params.get("city")
+        language = params.get("language")
+        if specialty and profile.get("specialty") != specialty:
+            continue
+        if city and profile.get("city") != city:
+            continue
+        if language and language not in profile.get("languages", []):
+            continue
+        normalised.append(doctor)
+    normalised.sort(key=lambda item: (item["doctorProfile"].get("city", ""), item.get("lastName", "")))
 
-    return json_response({"items": items})
+    return json_response({"items": normalised})

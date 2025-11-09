@@ -8,81 +8,114 @@
   </head>
   <body>
     <main>
-      <header class="card" style="margin-bottom: 24px;">
-        <div class="section-header">
-          <div>
-            <h1>Patient workspace</h1>
-            <p class="helper-text">Signed in as <span id="userEmail"></span></p>
-          </div>
+      <header class="card page-header">
+        <div>
+          <h1>Patient workspace</h1>
+          <p class="helper-text">Signed in as <span id="userEmail"></span></p>
+        </div>
+        <div class="page-actions">
+          <button type="button" class="secondary" id="demoDataBtn" hidden>Load demo data</button>
           <button type="button" class="secondary" id="signOutBtn">Sign out</button>
         </div>
       </header>
 
-      <section class="section" aria-labelledby="findDoctorHeading">
+      <section class="card" aria-labelledby="intakeHeading">
         <div class="section-header">
           <div>
-            <h2 id="findDoctorHeading">Find a doctor</h2>
-            <p class="helper-text">Filter by specialty, location or language.</p>
+            <h2 id="intakeHeading">Prepare your visit</h2>
+            <p class="helper-text">
+              Select the problem that best describes your symptoms. We will gather the vitals required for triage and recommend a specialty.
+            </p>
           </div>
         </div>
-        <form id="doctorSearchForm" class="layout-grid two-col" novalidate>
+        <form id="intakeForm" class="vitals-form" novalidate>
           <label>
-            Specialty
-            <input type="text" name="specialty" placeholder="Dermatology" />
+            Problem
+            <select name="problem" id="problemSelect" required aria-describedby="problemHelp">
+              <option value="">Select a problem</option>
+            </select>
+            <span id="problemHelp" class="helper-text">Problems control the required vitals and suggested specialty.</span>
+            <span class="error-text" data-error-for="problem"></span>
           </label>
           <label>
-            Location
-            <input type="text" name="location" placeholder="Seattle" />
+            Recommended specialty
+            <select id="specialtySelect" required>
+              <option value="">Select specialty</option>
+            </select>
+            <span class="helper-text">Change if you prefer a different specialty.</span>
+            <span class="error-text" data-error-for="specialty"></span>
           </label>
-          <label>
-            Language
-            <input type="text" name="language" placeholder="English" />
-          </label>
-          <div>
-            <button type="submit">Search</button>
+          <div class="badge info" id="recommendedSpecialty" aria-live="polite"></div>
+
+          <div class="vitals-section" aria-labelledby="mandatoryHeading">
+            <h3 id="mandatoryHeading">Mandatory vitals</h3>
+            <div class="layout-grid two-col" id="mandatoryVitals"></div>
+          </div>
+
+          <div class="vitals-section" aria-labelledby="extraHeading">
+            <h3 id="extraHeading">Problem-specific vitals</h3>
+            <div class="layout-grid two-col" id="problemVitals"></div>
+            <p class="helper-text">All listed vitals are required for the chosen problem.</p>
+          </div>
+
+          <div class="layout-grid three-col" id="searchFilters">
+            <label>
+              Preferred city
+              <select id="locationFilter">
+                <option value="">Any</option>
+              </select>
+            </label>
+            <label>
+              Preferred language
+              <select id="languageFilter">
+                <option value="">Any</option>
+              </select>
+            </label>
+            <label>
+              Available slots
+              <select id="slotWindow">
+                <option value="7">Next 7 days</option>
+                <option value="14">Next 14 days</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" id="findDoctorsBtn">Find doctors</button>
           </div>
         </form>
-        <div class="list" id="doctorResults" role="list"></div>
       </section>
 
-      <section class="section" aria-labelledby="appointmentsHeading">
+      <section class="card" aria-labelledby="doctorSearchHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="doctorSearchHeading">Available doctors</h2>
+            <p class="helper-text">Results honour your filters and the recommended specialty. Select a slot to book.</p>
+          </div>
+        </div>
+        <div id="doctorResults" class="list" role="list" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="appointmentsHeading">
         <div class="section-header">
           <div>
             <h2 id="appointmentsHeading">My appointments</h2>
-            <p class="helper-text">Track pending and confirmed bookings.</p>
+            <p class="helper-text">Track booking statuses. Cancel if you can no longer attend.</p>
           </div>
         </div>
-        <div class="list" id="appointmentsList" role="list"></div>
+        <div class="list" id="appointmentsList" role="list" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="latestVitalsHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="latestVitalsHeading">Latest submitted vitals</h2>
+            <p class="helper-text">The most recent intake snapshot saved to the patient health index.</p>
+          </div>
+        </div>
+        <div id="healthIndexPanel" class="list" aria-live="polite"></div>
       </section>
     </main>
-
-    <div class="modal-backdrop" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="bookingTitle">
-      <div class="modal" id="bookingModal">
-        <div class="section-header">
-          <h2 id="bookingTitle">Book appointment</h2>
-          <button type="button" class="secondary" data-close-modal>&times;</button>
-        </div>
-        <p class="helper-text">Booking with <strong id="selectedDoctor"></strong></p>
-        <form id="bookingForm" class="layout-grid" novalidate>
-          <label>
-            Date
-            <input type="date" name="appointmentDate" required />
-          </label>
-          <label>
-            Time (24-hour)
-            <input type="time" name="appointmentTime" required />
-          </label>
-          <label>
-            Reason (optional)
-            <textarea name="reason" rows="3" placeholder="Symptoms or context"></textarea>
-          </label>
-          <div class="layout-grid two-col">
-            <button type="submit">Request appointment</button>
-            <button type="button" class="secondary" data-close-modal>Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
 
     <script type="module" src="./assets/patient.js"></script>
   </body>

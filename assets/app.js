@@ -1,3 +1,10 @@
+import {
+  LANGUAGE_OPTIONS,
+  LOCATION_OPTIONS,
+  SPECIALTIES,
+  generateDoctorSlots,
+} from "./constants.js";
+
 const SESSION_KEY = "healthApp.session";
 let configPromise;
 let cachedConfig;
@@ -90,6 +97,13 @@ export function getSession() {
       localStorage.removeItem(SESSION_KEY);
       return null;
     }
+    if (!session.sub && session.idToken) {
+      const payload = decodeJwt(session.idToken);
+      if (payload?.sub) {
+        session.sub = payload.sub;
+        persistSession(session);
+      }
+    }
     return session;
   } catch (error) {
     console.error("Invalid session", error);
@@ -114,6 +128,70 @@ function buildUserPool(cognito) {
   });
 }
 
+function normaliseOption(value, allowed) {
+  if (!value) return "";
+  return allowed.includes(value) ? value : "";
+}
+
+export function normalizeLanguages(values) {
+  if (!values) {
+    return [];
+  }
+
+  let iterable;
+  if (Array.isArray(values)) {
+    iterable = values;
+  } else if (typeof values === "string") {
+    iterable = values.split(",").map((item) => item.trim()).filter(Boolean);
+  } else if (values instanceof Set) {
+    iterable = Array.from(values);
+  } else {
+    iterable = [];
+  }
+
+  const allowed = new Set(LANGUAGE_OPTIONS);
+  return Array.from(
+    new Set(
+      iterable
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((item) => item && allowed.has(item))
+    )
+  );
+}
+
+export function buildDoctorProfile(source) {
+  const specialtyValue = typeof source.specialty === "string"
+    ? source.specialty
+    : source.specialty?.value;
+  const cityValue = typeof source.city === "string"
+    ? source.city
+    : source.city?.value;
+  let languages;
+  if (Array.isArray(source.languages)) {
+    languages = source.languages;
+  } else if (source.languages?.selectedOptions) {
+    languages = Array.from(source.languages.selectedOptions).map((option) => option.value);
+  } else if (typeof source.languages === "string") {
+    languages = source.languages.split(",").map((item) => item.trim()).filter(Boolean);
+  } else {
+    languages = [];
+  }
+
+  const specialty = normaliseOption(specialtyValue, SPECIALTIES);
+  const city = normaliseOption(cityValue, LOCATION_OPTIONS);
+  const normalizedLanguages = normalizeLanguages(languages);
+  const availSlots = Array.isArray(source.availSlots) && source.availSlots.length
+    ? source.availSlots
+    : generateDoctorSlots();
+
+  return {
+    specialty,
+    city,
+    languages: normalizedLanguages,
+    availSlots,
+  };
+}
+
 export async function signUpUser(form) {
   await loadConfig();
   const cognito = await ensureCognitoLibrary();
@@ -124,33 +202,56 @@ export async function signUpUser(form) {
   const firstName = form.firstName.value.trim();
   const lastName = form.lastName.value.trim();
   const role = form.role.value;
-  const specialty = form.specialty?.value.trim();
-  const languages = form.languages?.value.trim();
-  const location = form.location?.value.trim();
 
   const attributeList = [
     new cognito.CognitoUserAttribute({ Name: "given_name", Value: firstName }),
     new cognito.CognitoUserAttribute({ Name: "family_name", Value: lastName }),
     new cognito.CognitoUserAttribute({ Name: "custom:role", Value: role }),
   ];
-  if (specialty) {
-    attributeList.push(new cognito.CognitoUserAttribute({ Name: "custom:specialty", Value: specialty }));
-  }
-  if (languages) {
-    attributeList.push(new cognito.CognitoUserAttribute({ Name: "custom:languages", Value: languages }));
-  }
-  if (location) {
-    attributeList.push(new cognito.CognitoUserAttribute({ Name: "custom:location", Value: location }));
+
+  if (role === "DOCTOR") {
+    const profile = buildDoctorProfile({
+      specialty: form.specialty,
+      city: form.city,
+      languages: form.languages,
+    });
+    if (profile.specialty) {
+      attributeList.push(new cognito.CognitoUserAttribute({ Name: "custom:specialty", Value: profile.specialty }));
+    }
+    if (profile.city) {
+      attributeList.push(new cognito.CognitoUserAttribute({ Name: "custom:location", Value: profile.city }));
+    }
+    if (profile.languages.length) {
+      attributeList.push(
+        new cognito.CognitoUserAttribute({
+          Name: "custom:languages",
+          Value: profile.languages.join(","),
+        })
+      );
+    }
+    attributeList.push(
+      new cognito.CognitoUserAttribute({
+        Name: "custom:availability",
+        Value: JSON.stringify(profile.availSlots),
+      })
+    );
   }
 
   return new Promise((resolve, reject) => {
-    pool.signUp(email, password, attributeList, [], (err, result) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(result);
-      }
-    });
+    pool.signUp(
+      email,
+      password,
+      attributeList,
+      null,
+      (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      },
+      null
+    );
   });
 }
 
@@ -206,7 +307,12 @@ export async function authenticateUser(email, password) {
         const refreshToken = session.getRefreshToken().getToken();
         const payload = decodeJwt(idToken);
         const groups = payload["cognito:groups"] || [];
-        const normalizedGroups = Array.isArray(groups) ? groups : String(groups).split(",").filter(Boolean);
+        const normalizedGroups = Array.isArray(groups)
+          ? groups
+          : String(groups)
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean);
         const expiresAt = payload.exp;
         const stored = {
           email: email.toLowerCase(),
@@ -215,6 +321,7 @@ export async function authenticateUser(email, password) {
           refreshToken,
           groups: normalizedGroups,
           expiresAt,
+          sub: payload.sub,
         };
         persistSession(stored);
         resolve(stored);
@@ -257,6 +364,7 @@ export async function fetchJSON(path, options = {}) {
   if (session?.idToken) {
     headers.set("Authorization", `Bearer ${session.idToken}`);
   }
+  console.info("fetchJSON", path, options.method || "GET");
   const response = await fetch(`${config.apiBaseUrl}${path}`, {
     ...options,
     headers,
@@ -267,6 +375,7 @@ export async function fetchJSON(path, options = {}) {
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = json.message || response.statusText;
+    console.error("fetchJSON error", path, message, json);
     throw new Error(message);
   }
   return json;
@@ -288,8 +397,10 @@ export function requireRole(allowed) {
 
 export function disableWhilePending(button, promise) {
   button.disabled = true;
+  button.setAttribute("aria-busy", "true");
   return promise.finally(() => {
     button.disabled = false;
+    button.removeAttribute("aria-busy");
   });
 }
 
@@ -341,10 +452,30 @@ export function getUserEmail() {
   return getSession()?.email || "";
 }
 
-const groupsClaim = payload["cognito:groups"];
-let normalizedGroups = Array.isArray(groupsClaim)
-  ? groupsClaim
-  : (groupsClaim ? String(groupsClaim).split(",").filter(Boolean) : []);
-if (normalizedGroups.length === 0 && payload["custom:role"]) {
-  normalizedGroups = [String(payload["custom:role"]).toUpperCase()];
+export async function seedDemoData() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("seed") !== "1") {
+    return;
+  }
+  const session = getSession();
+  if (!session) {
+    showToast("Sign in before seeding demo data", "error");
+    return;
+  }
+  try {
+    const response = await fetch("./assets/demo-data/doctors.json", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Unable to read demo data (${response.status})`);
+    }
+    const doctors = await response.json();
+    await fetchJSON("/admin/seed/doctors", {
+      method: "POST",
+      body: JSON.stringify({ doctors }),
+    });
+    showToast("Demo doctors seeded", "success");
+  } catch (error) {
+    console.info("Seed helper fallback", error);
+    showToast("Seed endpoint unavailable. Use CLI steps in README to load demo data.", "error");
+  }
 }
+

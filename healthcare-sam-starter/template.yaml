@@ -31,21 +31,22 @@ Resources:
     Properties:
       LogGroupName: !Sub "/aws/http-api/health-platform-${EnvironmentName}"
       RetentionInDays: 30
+
   ApiGateway:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: v1
       CorsConfiguration:
-        AllowCredentials: false
-        AllowHeaders:
-          - Authorization
-          - Content-Type
         AllowMethods:
           - GET
           - POST
           - OPTIONS
         AllowOrigins:
-          - "*"
+          - !Sub "https://health-${EnvironmentName}.${AWS::Region}.cloudfront.net"
+          - "http://localhost:3000"
+        AllowHeaders:
+          - Authorization
+          - Content-Type
       Auth:
         Authorizers:
           CognitoAuthorizer:
@@ -54,7 +55,10 @@ Resources:
               audience:
                 - !Ref CognitoUserPoolClient
               issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}"
+            AuthorizationScopes:
+              - email
         DefaultAuthorizer: CognitoAuthorizer
+
   ApiAccessLog:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -264,41 +268,19 @@ Resources:
     Properties:
       CodeUri: functions/auth_post_confirm/
       Handler: app.lambda_handler
-      Runtime: python3.11         # or your global default
-      Timeout: 15
-      MemorySize: 256
-      Environment:
-        Variables:
-          USERS_TABLE_NAME: !Ref UsersTable
       Policies:
-        # Write to Users table
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
               Resource: !GetAtt UsersTable.Arn
-        # NEW: allow adding to Cognito group
-        - Statement:
-            Effect: Allow
-            Action:
-              - cognito-idp:AdminAddUserToGroup
-            Resource: "*"
-        # (optional) logs
-        - Statement:
-            Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: "*"
       Events:
         PostConfirmation:
           Type: Cognito
           Properties:
             UserPool: !Ref CognitoUserPool
             Trigger: PostConfirmation
-
 
   DoctorsGetFunction:
     Type: AWS::Serverless::Function
@@ -516,7 +498,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiGateway
-            Path: /patient/{patientId}/health/summary
+            Path: /patient-health/{patientId}/latest
             Method: GET
 
   EventsToS3WriterFunction:
