@@ -1,38 +1,563 @@
-
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Minimal Healthcare MVP - REST API + Lambda (registration)
+Description: Health Management Platform - Cognito auth, Appointments API, Data Lake plumbing
 
 Globals:
   Function:
-    Timeout: 5
-    MemorySize: 128
-    Runtime: python3.12
+    Runtime: python3.11
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        USERS_TABLE_NAME: !Ref UsersTable
+        APPOINTMENTS_TABLE_NAME: !Ref AppointmentsTable
+        PATIENT_HEALTH_INDEX_TABLE_NAME: !Ref PatientHealthIndexTable
+        CLINICAL_BUCKET_NAME: !Ref ClinicalRawBucket
+        CURATED_BUCKET_NAME: !Ref AnalyticsCuratedBucket
+        FEATURE_STORE_BUCKET_NAME: !Ref FeatureStoreBucket
+        POWERTOOLS_SERVICE_NAME: health-platform
+        LOG_LEVEL: INFO
+        APPOINTMENT_EVENT_BUS_NAME: !Ref AppointmentEventBus
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    Description: Environment identifier suffix
 
 Resources:
-  ApiGateway:
-    Type: AWS::Serverless::Api
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      StageName: prod
-      Cors:
-        AllowMethods: "'POST,OPTIONS'"
-        AllowHeaders: "'Content-Type,Authorization'"
-        AllowOrigin: "'*'"
+      LogGroupName: !Sub "/aws/http-api/health-platform-${EnvironmentName}"
+      RetentionInDays: 30
 
-  RegistrationFunction:
+  ApiGateway:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: v1
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowOrigins:
+          - !Sub "https://health-${EnvironmentName}.${AWS::Region}.cloudfront.net"
+          - "http://localhost:3000"
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              audience:
+                - !Ref CognitoUserPoolClient
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}"
+            AuthorizationScopes:
+              - email
+        DefaultAuthorizer: CognitoAuthorizer
+
+  ApiAccessLog:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/health-platform-${EnvironmentName}"
+      RetentionInDays: 30
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      TableName: !Sub health-users-${EnvironmentName}
+
+  AppointmentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: appointmentId
+          AttributeType: S
+        - AttributeName: doctorId
+          AttributeType: S
+        - AttributeName: patientId
+          AttributeType: S
+        - AttributeName: slotISO
+          AttributeType: S
+      KeySchema:
+        - AttributeName: appointmentId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: doctorId
+              KeyType: HASH
+            - AttributeName: slotISO
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: GSI2
+          KeySchema:
+            - AttributeName: patientId
+              KeyType: HASH
+            - AttributeName: slotISO
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+      TableName: !Sub health-appointments-${EnvironmentName}
+
+  PatientHealthIndexTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: patientId
+          AttributeType: S
+        - AttributeName: recordId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: patientId
+          KeyType: HASH
+        - AttributeName: recordId
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+      TableName: !Sub health-patient-health-index-${EnvironmentName}
+
+  ClinicalRawBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hm-clinical-raw-${EnvironmentName}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  AnalyticsCuratedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hm-analytics-curated-${EnvironmentName}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  FeatureStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hm-feature-store-${EnvironmentName}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  StaticSiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hm-static-site-${EnvironmentName}-${AWS::AccountId}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub health-users-${EnvironmentName}
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+        - Name: given_name
+          AttributeDataType: String
+          Mutable: true
+        - Name: family_name
+          AttributeDataType: String
+          Mutable: true
+        - Name: role
+          AttributeDataType: String
+          Mutable: true
+        - Name: specialty
+          AttributeDataType: String
+          Mutable: true
+        - Name: languages
+          AttributeDataType: String
+          Mutable: true
+        - Name: location
+          AttributeDataType: String
+          Mutable: true
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: health-app-client
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      PreventUserExistenceErrors: ENABLED
+      CallbackURLs:
+        - !Sub "https://health-${EnvironmentName}.${AWS::Region}.cloudfront.net"
+        - "http://localhost:3000"
+      LogoutURLs:
+        - !Sub "https://health-${EnvironmentName}.${AWS::Region}.cloudfront.net"
+        - "http://localhost:3000"
+
+  CognitoGroupPatient:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: PATIENT
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupDoctor:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: DOCTOR
+      UserPoolId: !Ref CognitoUserPool
+
+  AuthPostConfirmationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: registration_handler/
+      CodeUri: functions/auth_post_confirm/
       Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt UsersTable.Arn
       Events:
-        RegistrationApi:
-          Type: Api
+        PostConfirmation:
+          Type: Cognito
           Properties:
-            RestApiId: !Ref ApiGateway
-            Path: /registration
-            Method: post
+            UserPool: !Ref CognitoUserPool
+            Trigger: PostConfirmation
+
+  DoctorsGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/doctors_get/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource: !GetAtt UsersTable.Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /doctors
+            Method: GET
+
+  AppointmentsCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/appointments_create/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !GetAtt AppointmentsTable.Arn
+                - !Sub "${AppointmentsTable.Arn}/index/*"
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt UsersTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /appointments
+            Method: POST
+
+  AppointmentsGetPatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/appointments_get_patient/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !Sub "${AppointmentsTable.Arn}/index/*"
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /appointments/patient
+            Method: GET
+
+  AppointmentsGetDoctorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/appointments_get_doctor/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !Sub "${AppointmentsTable.Arn}/index/*"
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /appointments/doctor
+            Method: GET
+
+  AppointmentsConfirmFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/appointments_confirm/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource:
+                - !GetAtt AppointmentsTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /appointments/{appointmentId}/confirm
+            Method: POST
+
+  AppointmentsDeclineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/appointments_decline/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource:
+                - !GetAtt AppointmentsTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /appointments/{appointmentId}/decline
+            Method: POST
+
+  AppointmentsCancelFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/appointments_cancel/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !GetAtt AppointmentsTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /appointments/{appointmentId}/cancel
+            Method: POST
+
+  PatientHealthIndexGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/patient_health_index_get/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !GetAtt PatientHealthIndexTable.Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /patient/{patientId}/health/index
+            Method: GET
+
+  PatientHealthSummaryGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/patient_health_summary_get/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !GetAtt AppointmentsTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !GetAtt PatientHealthIndexTable.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: !Sub "${ClinicalRawBucket.Arn}/*"
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /patient-health/{patientId}/latest
+            Method: GET
+
+  EventsToS3WriterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/events_to_s3_writer/
+      Handler: app.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub "${AnalyticsCuratedBucket.Arn}/*"
+
+  AppointmentEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub health-appointments-${EnvironmentName}
+
+  AppointmentEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Routes appointment lifecycle events to S3 writer lambda
+      EventBusName: !Ref AppointmentEventBus
+      EventPattern:
+        source:
+          - health.appointments
+      Targets:
+        - Arn: !GetAtt EventsToS3WriterFunction.Arn
+          Id: writer
+
+  PermissionForEventToInvokeWriter:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref EventsToS3WriterFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AppointmentEventRule.Arn
 
 Outputs:
   ApiBaseUrl:
-    Description: Base URL of the REST API stage
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod"
+    Description: Base URL for the HTTP API
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/v1"
+  UserPoolId:
+    Description: Cognito User Pool Id
+    Value: !Ref CognitoUserPool
+  UserPoolClientId:
+    Description: Cognito App Client Id
+    Value: !Ref CognitoUserPoolClient
+  Region:
+    Description: AWS Region
+    Value: !Ref AWS::Region
+  StaticSiteBucket:
+    Description: Bucket that hosts the static site and config.json
+    Value: !Ref StaticSiteBucket
+  DoctorMatchEndpoint:
+    Description: Placeholder for optional SageMaker endpoint
+    Value: ""
+  UsersTableName:
+    Description: DynamoDB Users table name
+    Value: !Ref UsersTable

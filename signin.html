@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="card" aria-labelledby="signinTitle">
+        <h1 id="signinTitle">Sign in</h1>
+        <p class="text-muted">Use your Cognito credentials to access the workspace.</p>
+        <form id="signinForm" novalidate>
+          <label>
+            Email
+            <input type="email" name="email" autocomplete="email" required />
+            <span class="error-text" data-error-for="email"></span>
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" autocomplete="current-password" required />
+            <span class="error-text" data-error-for="password"></span>
+          </label>
+          <div class="layout-grid two-col">
+            <button type="submit" id="signinBtn">Sign in</button>
+            <a class="button-link" href="./signup.html"><button type="button" class="secondary">Create account</button></a>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="./assets/signin.js"></script>
+  </body>
+</html>

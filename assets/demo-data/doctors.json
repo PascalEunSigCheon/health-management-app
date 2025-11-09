@@ -1,0 +1,56 @@
+[
+  {
+    "userId": "doctor-cardio-1",
+    "email": "doc.cardio@example.com",
+    "firstName": "Alice",
+    "lastName": "Cardio",
+    "specialty": "Cardiology",
+    "languages": ["English", "French"],
+    "city": "Paris"
+  },
+  {
+    "userId": "doctor-derm-1",
+    "email": "doc.derm@example.com",
+    "firstName": "Ben",
+    "lastName": "Derm",
+    "specialty": "Dermatology",
+    "languages": ["English"],
+    "city": "Lyon"
+  },
+  {
+    "userId": "doctor-neuro-1",
+    "email": "doc.neuro@example.com",
+    "firstName": "Nina",
+    "lastName": "Neuro",
+    "specialty": "Neurology",
+    "languages": ["English"],
+    "city": "Marseille"
+  },
+  {
+    "userId": "doctor-pulm-1",
+    "email": "doc.pulm@example.com",
+    "firstName": "Paul",
+    "lastName": "Pulmo",
+    "specialty": "Pulmonology",
+    "languages": ["French"],
+    "city": "Paris"
+  },
+  {
+    "userId": "doctor-gastro-1",
+    "email": "doc.gastro@example.com",
+    "firstName": "Gina",
+    "lastName": "Gastro",
+    "specialty": "Gastroenterology",
+    "languages": ["Spanish", "English"],
+    "city": "Nice"
+  },
+  {
+    "userId": "doctor-general-1",
+    "email": "doc.general@example.com",
+    "firstName": "Greg",
+    "lastName": "General",
+    "specialty": "General Medicine",
+    "languages": ["French", "Italian"],
+    "city": "Virtual"
+  }
+]

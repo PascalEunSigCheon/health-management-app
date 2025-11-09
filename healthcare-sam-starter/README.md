@@ -1,48 +1,103 @@
+# Health Management Platform (AWS SAM)
 
-# Healthcare SAM Starter (Minimal)
+This SAM application provisions the serverless backend for the health management experience. It includes Cognito authentication, appointment microservices, and the analytics plumbing described in the architecture brief.
 
-This is a minimal, working AWS SAM project that deploys:
-- A REST API Gateway stage (`/prod`)
-- One Lambda function wired to `POST /registration`
-- CORS enabled for browser calls
+## Prerequisites
 
-## Prereqs (run once on your laptop or Cloud9)
-1) Install and configure the AWS CLI:
-   https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
-   ```bash
-   aws configure
-   # Set your account's access key, secret, region (e.g., eu-west-3) and output json
-   ```
-2) Install the AWS SAM CLI:
-   https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html
+- AWS CLI configured with sufficient permissions to create IAM roles, Cognito, DynamoDB, S3, and EventBridge resources.
+- AWS SAM CLI 1.100+.
+- Python 3.11 for local packaging.
 
 ## Deploy
-From this folder:
+
 ```bash
 sam build
 sam deploy --guided
 ```
-- Choose a stack name (e.g., healthcare-mvp)
-- Accept the defaults and let SAM create a deployment bucket
-- After deploy, SAM will print `ApiBaseUrl` like:
-  https://abc123.execute-api.eu-west-3.amazonaws.com/prod
 
-## Test from your terminal
+Recommended answers during the first deployment:
+
+- **Stack Name**: `health-management-dev`
+- **AWS Region**: choose the region that hosts your Cognito users.
+- **Parameter EnvironmentName**: `dev` (or another short suffix used in bucket names).
+- **Confirm changes before deploy**: `y`
+- **Allow SAM CLI IAM role creation**: `y`
+
+SAM outputs the identifiers the frontend needs:
+
+- `ApiBaseUrl`
+- `UserPoolId`
+- `UserPoolClientId`
+- `Region`
+- `StaticSiteBucket`
+- `DoctorMatchEndpoint` (blank placeholder until a SageMaker endpoint exists)
+
+After deployment upload the built frontend into `StaticSiteBucket` and publish a `config.json` file alongside the HTML that contains:
+
+```json
+{
+  "apiBaseUrl": "<ApiBaseUrl>",
+  "region": "<Region>",
+  "userPoolId": "<UserPoolId>",
+  "userPoolClientId": "<UserPoolClientId>",
+  "doctorMatchEndpoint": ""
+}
+```
+
+## Local Testing
+
+You can invoke individual functions locally using SAM:
+
 ```bash
-API="https://<api-id>.execute-api.<region>.amazonaws.com/prod/registration"
-curl -i -X POST "$API" -H "Content-Type: application/json" -d '{"patientId":"p1","name":"Raja"}'
+sam local invoke DoctorsGetFunction --event events/sample-doctors-request.json
 ```
 
-Expect HTTP/1.1 200 and a JSON body.
+Provide Cognito-style JWT claims in the `requestContext` when invoking locally.
 
-## Wire the Frontend
-Give your teammate this full URL including `/registration`, e.g.:
-```
-https://abc123.execute-api.eu-west-3.amazonaws.com/prod/registration
-```
-In their `index.html`, call this endpoint with `fetch`.
+## Data Lake Buckets
 
-## Troubleshooting
-- 502: Check CloudWatch Logs for the Lambda; handler must return the exact JSON shape from `app.py`.
-- CORS error: Ensure your request is `POST` and your API has CORS (already enabled here). Also ensure your Lambda returns the CORS headers (done in `_res()`).
-- 403/404: Verify you used the full URL with `/prod/registration`.
+The template creates three encrypted buckets:
+
+- `hm-clinical-raw-<env>-<account>` – receives raw FHIR-like payloads partitioned by patient and date.
+- `hm-analytics-curated-<env>-<account>` – receives appointment events written by the EventBridge consumer.
+- `hm-feature-store-<env>-<account>` – holds curated features for ML workflows.
+
+Buckets and tables use AWS-managed encryption keys (SSE-S3 and DynamoDB-managed KMS) by default to keep the footprint within
+free-tier friendly limits. You can supply your own KMS keys by extending the template if your compliance requirements demand
+customer-managed encryption.
+
+## Seeding Doctors
+
+To pre-populate the Users table with doctor profiles:
+
+```bash
+python scripts/seed_doctors.py --table $(aws cloudformation describe-stacks \
+  --stack-name health-management-dev \
+  --query 'Stacks[0].Outputs[?OutputKey==`UsersTableName`].OutputValue' \
+  --output text)
+```
+
+or provide a JSON file of doctors using `--input`. Ensure each record contains `userId`, `email`, and optional metadata.
+
+## Updating config.json automatically
+
+After `sam deploy` you can automate config publishing:
+
+```bash
+aws s3 cp frontend/config.json s3://$(aws cloudformation describe-stacks \
+  --stack-name health-management-dev \
+  --query 'Stacks[0].Outputs[?OutputKey==`StaticSiteBucket`].OutputValue' \
+  --output text)/config.json
+```
+
+where `frontend/config.json` is generated as part of your build pipeline using the stack outputs.
+
+## Cleanup
+
+Remove all resources with:
+
+```bash
+sam delete
+```
+
+This deletes the CloudFormation stack and associated resources (retained data in S3 buckets must be removed manually if deletion fails).

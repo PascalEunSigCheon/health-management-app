@@ -1,573 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Health Manager - Sign Up</title>
-  <style>
-    :root {
-      --bg: #0f172a;
-      --panel: #111827;
-      --muted: #6b7280;
-      --text: #e5e7eb;
-      --accent: #22c55e;
-      --danger: #ef4444;
-      --focus: #60a5fa;
-      --card: #0b1220;
-      --border: #1f2937;
-    }
-
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-      background: radial-gradient(1000px 500px at 10% 10%, #0b1220 10%, transparent 60%),
-                  radial-gradient(800px 400px at 90% 0%, #0b1220 10%, transparent 60%),
-                  var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 560px;
-    }
-
-    .card {
-      background: linear-gradient(180deg, var(--panel), rgba(17,24,39,0.6));
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-
-    h1 { margin: 0 0 12px 0; font-size: 22px; font-weight: 700; }
-    .muted { color: var(--muted); }
-    .row { display: flex; gap: 10px; align-items: center; }
-    .row > * { flex: 1; }
-
-    label { font-size: 13px; color: var(--muted); }
-    input[type="text"], input[type="email"], input[type="password"], select, textarea {
-      width: 100%;
-      color: var(--text);
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
-      outline: none;
-      font-family: inherit;
-    }
-    input:focus, select:focus, textarea:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(96,165,250,0.2); }
-    textarea { resize: vertical; min-height: 80px; }
-    input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-      accent-color: var(--accent);
-    }
-
-    .btn {
-      appearance: none;
-      border: none;
-      background: var(--accent);
-      color: #04110a;
-      font-weight: 700;
-      padding: 10px 16px;
-      border-radius: 999px;
-      cursor: pointer;
-      transition: transform 120ms ease, box-shadow 120ms ease;
-      box-shadow: 0 6px 20px rgba(34,197,94,0.25);
-    }
-    .btn:hover:not(:disabled) { transform: translateY(-1px); }
-    .btn:active:not(:disabled) { transform: translateY(0); }
-    .btn:disabled { 
-      opacity: 0.6; 
-      cursor: not-allowed; 
-      transform: none !important;
-    }
-    .btn.secondary { background: #1f2937; color: var(--text); box-shadow: none; border: 1px solid var(--border); }
-
-    .footer { margin-top: 18px; text-align: center; font-size: 12px; color: var(--muted); }
-    .hidden { display: none !important; }
-    a { color: var(--focus); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="card">
-      <h1>Create your account</h1>
-      <div class="muted">Demo only: data stored in your browser (localStorage)</div>
-      <div style="height: 12px"></div>
-      <form id="signUpForm" novalidate>
-        <div style="display: grid; gap: 12px;">
-          <div>
-            <label for="name">Full name</label>
-            <input id="name" type="text" required placeholder="e.g., Jane Doe" autocomplete="name" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create your account</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="card" aria-labelledby="signupTitle">
+        <h1 id="signupTitle">Create an account</h1>
+        <p class="text-muted">
+          All fields are required unless marked optional. Choose your role to unlock the relevant workspace.
+        </p>
+        <form id="signupForm" novalidate>
+          <div class="layout-grid two-col">
+            <label>
+              First name
+              <input type="text" name="firstName" autocomplete="given-name" required />
+              <span class="error-text" data-error-for="firstName"></span>
+            </label>
+            <label>
+              Last name
+              <input type="text" name="lastName" autocomplete="family-name" required />
+              <span class="error-text" data-error-for="lastName"></span>
+            </label>
           </div>
-          <div>
-            <label for="email">Email</label>
-            <input id="email" type="email" required placeholder="you@example.com" autocomplete="email" />
-          </div>
-          <div>
-            <label for="password">Password</label>
-            <input id="password" type="password" required placeholder="••••••••" autocomplete="new-password" minlength="8" />
-            <div class="muted" style="font-size: 11px; margin-top: 4px;">
-              Password must be at least 8 characters and contain uppercase, lowercase, number, and special character
-            </div>
-          </div>
-          <div>
-            <label for="role">Role</label>
-            <select id="role" required>
-              <option value="patient">Patient</option>
-              <option value="doctor">Doctor</option>
-              <option value="admin">Admin</option>
+          <label>
+            Email
+            <input type="email" name="email" autocomplete="email" required />
+            <span class="error-text" data-error-for="email"></span>
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              name="password"
+              autocomplete="new-password"
+              required
+              aria-describedby="passwordHelp"
+            />
+            <span id="passwordHelp" class="helper-text">At least 8 characters with upper, lower, number and symbol.</span>
+            <span class="error-text" data-error-for="password"></span>
+          </label>
+          <label>
+            Role
+            <select name="role" required>
+              <option value="">Select role</option>
+              <option value="PATIENT">Patient</option>
+              <option value="DOCTOR">Doctor</option>
             </select>
-          </div>
-        </div>
-        <div style="height: 12px"></div>
-        <div id="patientHealthSection" class="hidden">
-          <h1 style="font-size:16px; margin:0 0 8px 0;">Health Info (Patient)</h1>
-          <div class="muted" style="margin-bottom:8px;">Stored locally. Units: height in cm, weight in kg.</div>
-          <div style="display:grid; gap:12px;">
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-              <div>
-                <label for="heightCm">Height (cm)</label>
-                <input id="heightCm" type="text" inputmode="decimal" placeholder="e.g., 170" />
-              </div>
-              <div>
-                <label for="weightKg">Weight (kg)</label>
-                <input id="weightKg" type="text" inputmode="decimal" placeholder="e.g., 65" />
-              </div>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-              <div>
-                <label for="bloodType">Blood type</label>
-                <select id="bloodType">
-                  <option value="">Select</option>
-                  <option>O+</option>
-                  <option>O-</option>
-                  <option>A+</option>
-                  <option>A-</option>
-                  <option>B+</option>
-                  <option>B-</option>
-                  <option>AB+</option>
-                  <option>AB-</option>
+            <span class="error-text" data-error-for="role"></span>
+          </label>
+          <fieldset id="doctorFields" class="fieldset" hidden>
+            <legend>Doctor profile</legend>
+            <p class="helper-text">
+              Provide your clinical details. Specialty, languages, location, and availability are captured as Cognito custom attributes for downstream provisioning.
+            </p>
+            <div class="layout-grid two-col">
+              <label>
+                Specialty
+                <select name="specialty">
+                  <option value="">Select specialty</option>
                 </select>
-              </div>
-              <div>
-                <label for="age">Age</label>
-                <input id="age" type="text" inputmode="numeric" placeholder="e.g., 34" />
-              </div>
+                <span class="error-text" data-error-for="specialty"></span>
+              </label>
+              <label>
+                Primary city
+                <select name="city">
+                  <option value="">Select city</option>
+                </select>
+                <span class="error-text" data-error-for="city"></span>
+              </label>
             </div>
-            <div>
-              <label for="allergies">Allergies</label>
-              <textarea id="allergies" placeholder="e.g., Peanuts, penicillin"></textarea>
-            </div>
-            <div>
-              <label for="conditions">Conditions</label>
-              <textarea id="conditions" placeholder="e.g., Asthma"></textarea>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-              <div>
-                <label for="bmi">BMI</label>
-                <input id="bmi" type="text" inputmode="decimal" placeholder="e.g., 22.5" />
-              </div>
-              <div style="display:flex; align-items:flex-end;">
-                <button type="button" class="btn secondary" id="calculateBmiBtn" style="width:100%;">Calculate from height/weight</button>
-              </div>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-              <div>
-                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                  <input type="checkbox" id="diabetes" style="width:auto; margin:0;" />
-                  <span>Diabetes</span>
-                </label>
-              </div>
-              <div>
-                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                  <input type="checkbox" id="highBp" style="width:auto; margin:0;" />
-                  <span>High Blood Pressure</span>
-                </label>
-              </div>
-              <div>
-                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                  <input type="checkbox" id="highCholesterol" style="width:auto; margin:0;" />
-                  <span>High Cholesterol</span>
-                </label>
-              </div>
-              <div>
-                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                  <input type="checkbox" id="smoker" style="width:auto; margin:0;" />
-                  <span>Smoker</span>
-                </label>
-              </div>
-            </div>
+            <label>
+              Languages spoken
+              <select name="languages" multiple size="4" aria-describedby="languagesHelp">
+              </select>
+              <span id="languagesHelp" class="helper-text">Ctrl/Cmd+click to select more than one language.</span>
+              <span class="error-text" data-error-for="languages"></span>
+            </label>
+          </fieldset>
+          <div class="layout-grid two-col">
+            <button type="submit" id="signupBtn">Create account</button>
+            <a class="button-link" href="./signin.html">
+              <button type="button" class="secondary">Have an account?</button>
+            </a>
           </div>
-        </div>
-        <div style="height: 12px"></div>
-        <div class="row">
-          <button class="btn" type="submit" id="submitBtn">Sign up</button>
-          <a class="btn secondary" href="./index.html" style="text-align:center;">Cancel</a>
-        </div>
-      </form>
-      <div class="footer">Already have an account? <a href="./index.html">Sign in</a></div>
-    </div>
-  </div>
-
-  <!-- AWS Cognito SDK -->
-  <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
-  <!-- AWS SDK v3 for Cognito (required for client secret support) -->
-  <script src="https://unpkg.com/@aws-sdk/client-cognito-identity-provider@3.490.0/dist-browser/index.js"></script>
-  
-  <script>
-    // AWS Cognito Configuration - Update these with your Cognito User Pool details
-    const COGNITO_CONFIG = {
-      UserPoolId: 'us-east-1_J6s1BPTHx', // e.g., 'us-east-1_xxxxxxxxx'
-      ClientId: '76dlunfcl962e5eoog063ae8fq', // e.g., 'xxxxxxxxxxxxxxxxxxxxxxxxxx'
-      ClientSecret: '11r13l9l5krdp4veumv94jtpm8c6idoef977n26i148rklvo13d5', // Get this from Cognito App Client settings
-      Region: 'us-east-1' // e.g., 'us-east-1'
-    };
-
-    // Initialize Cognito User Pool
-    const poolData = {
-      UserPoolId: COGNITO_CONFIG.UserPoolId,
-      ClientId: COGNITO_CONFIG.ClientId
-    };
-    const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
-
-    // Calculate SECRET_HASH for Cognito requests (required when App Client has a secret)
-    async function calculateSecretHash(username) {
-      if (!COGNITO_CONFIG.ClientSecret) {
-        return null; // No secret hash needed if no client secret
-      }
-      
-      const message = username + COGNITO_CONFIG.ClientId;
-      const encoder = new TextEncoder();
-      const keyData = encoder.encode(COGNITO_CONFIG.ClientSecret);
-      const messageData = encoder.encode(message);
-      
-      const key = await crypto.subtle.importKey(
-        'raw',
-        keyData,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
-      
-      const signature = await crypto.subtle.sign('HMAC', key, messageData);
-      const hashArray = Array.from(new Uint8Array(signature));
-      return btoa(String.fromCharCode(...hashArray));
-    }
-
-    // API Configuration - Update this with your actual API endpoint
-    const API_BASE_URL = 'https://x4rdxhj5kg.execute-api.eu-west-3.amazonaws.com/prod';
-    const API_ENDPOINTS = { signup: '/registration' };
-
-    const storageKeys = Object.freeze({
-      currentUser: 'hm.currentUser',
-      users: 'hm.users'
-    });
-
-    function getUsers() {
-      const raw = localStorage.getItem(storageKeys.users);
-      return raw ? JSON.parse(raw) : [];
-    }
-    function setUsers(users) {
-      localStorage.setItem(storageKeys.users, JSON.stringify(users));
-    }
-
-    async function sha256(text) {
-      const enc = new TextEncoder();
-      const data = enc.encode(text);
-      const buf = await crypto.subtle.digest('SHA-256', data);
-      const arr = Array.from(new Uint8Array(buf));
-      return arr.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    function parseNumber(value) {
-      if (typeof value !== 'string') return null;
-      const v = value.replace(/,/g, '.').trim();
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
-    }
-
-    function toggleHealthSection() {
-      const role = document.getElementById('role').value;
-      const section = document.getElementById('patientHealthSection');
-      if (!section) return;
-      if (role === 'patient') section.classList.remove('hidden');
-      else section.classList.add('hidden');
-    }
-
-    document.getElementById('role').addEventListener('change', toggleHealthSection);
-    // initialize visibility
-    toggleHealthSection();
-
-    function calculateBmi() {
-      const heightCm = parseNumber(document.getElementById('heightCm').value);
-      const weightKg = parseNumber(document.getElementById('weightKg').value);
-      const bmiInput = document.getElementById('bmi');
-      
-      if (!heightCm || !weightKg || heightCm <= 0 || weightKg <= 0) {
-        alert('Please enter both height and weight to calculate BMI.');
-        return;
-      }
-      
-      const meters = heightCm / 100;
-      const bmi = weightKg / (meters * meters);
-      bmiInput.value = bmi.toFixed(1);
-    }
-
-    document.getElementById('calculateBmiBtn').addEventListener('click', calculateBmi);
-
-    document.getElementById('signUpForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const submitBtn = document.getElementById('submitBtn');
-      const originalBtnText = submitBtn.textContent;
-      
-      // Disable button and show loading state
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating account...';
-
-      const name = document.getElementById('name').value.trim();
-      const email = document.getElementById('email').value.trim().toLowerCase();
-      const password = document.getElementById('password').value;
-      const role = document.getElementById('role').value;
-
-      if (!name) { 
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
-        alert('Please enter your name'); 
-        return; 
-      }
-      if (!email || !email.includes('@')) { 
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
-        alert('Enter a valid email'); 
-        return; 
-      }
-      // Validate password requirements (Cognito default requirements)
-      if (!password) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
-        alert('Password is required');
-        return;
-      }
-      
-      // Client-side password validation (matching typical Cognito requirements)
-      const passwordErrors = [];
-      if (password.length < 8) {
-        passwordErrors.push('at least 8 characters');
-      }
-      if (!/[A-Z]/.test(password)) {
-        passwordErrors.push('one uppercase letter');
-      }
-      if (!/[a-z]/.test(password)) {
-        passwordErrors.push('one lowercase letter');
-      }
-      if (!/[0-9]/.test(password)) {
-        passwordErrors.push('one number');
-      }
-      if (!/[^A-Za-z0-9]/.test(password)) {
-        passwordErrors.push('one special character');
-      }
-      
-      if (passwordErrors.length > 0) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
-        alert('Password must contain:\n• ' + passwordErrors.join('\n• '));
-        return;
-      }
-
-      const users = getUsers();
-      if (users.some(u => (u.email || '').toLowerCase() === email)) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
-        alert('An account with this email already exists.');
-        return;
-      }
-
-      // Collect health information if patient
-      let healthData = null;
-      if (role === 'patient') {
-        const heightCm = parseNumber(document.getElementById('heightCm').value);
-        const weightKg = parseNumber(document.getElementById('weightKg').value);
-        const bloodType = document.getElementById('bloodType').value;
-        const age = parseNumber(document.getElementById('age').value);
-        const allergies = document.getElementById('allergies').value.trim();
-        const conditions = document.getElementById('conditions').value.trim();
-        const bmi = parseNumber(document.getElementById('bmi').value);
-        const diabetes = document.getElementById('diabetes').checked;
-        const highBp = document.getElementById('highBp').checked;
-        const highCholesterol = document.getElementById('highCholesterol').checked;
-        const smoker = document.getElementById('smoker').checked;
-
-        healthData = {
-          heightCm: heightCm ?? null,
-          weightKg: weightKg ?? null,
-          bloodType: bloodType || '',
-          age: age ?? null,
-          allergies,
-          conditions,
-          bmi: bmi ?? null,
-          diabetes,
-          highBp,
-          highCholesterol,
-          smoker
-        };
-      }
-
-      // Sign up with AWS Cognito
-      // Note: We're not storing 'role' as a Cognito attribute since custom attributes need to be pre-configured
-      // Role will be stored in our API/localStorage instead
-      const attributeList = [
-        new AmazonCognitoIdentity.CognitoUserAttribute({ Name: 'email', Value: email }),
-        new AmazonCognitoIdentity.CognitoUserAttribute({ Name: 'name', Value: name })
-      ];
-
-      try {
-        // Calculate SECRET_HASH if client secret is configured
-        const secretHash = await calculateSecretHash(email);
-        
-        // Register user with Cognito using direct API call (required for client secret)
-        const signUpParams = {
-          ClientId: COGNITO_CONFIG.ClientId,
-          Username: email,
-          Password: password,
-          UserAttributes: attributeList.map(attr => ({
-            Name: attr.Name,
-            Value: attr.Value
-          }))
-        };
-        
-        // Add SECRET_HASH if client secret is configured
-        if (secretHash) {
-          signUpParams.SecretHash = secretHash;
-        }
-        
-        // Make direct API call to Cognito SignUp endpoint
-        const response = await fetch(`https://cognito-idp.${COGNITO_CONFIG.Region}.amazonaws.com/`, {
-          method: 'POST',
-          headers: {
-            'X-Amz-Target': 'AWSCognitoIdentityProviderService.SignUp',
-            'Content-Type': 'application/x-amz-json-1.1'
-          },
-          body: JSON.stringify(signUpParams)
-        });
-        
-        const result = await response.json();
-        
-        if (!response.ok) {
-          const errorType = result.__type || '';
-          const errorMessage = result.message || 'Sign up failed';
-          
-          // Handle specific Cognito errors
-          if (errorType.includes('UsernameExistsException')) {
-            throw { code: 'UsernameExistsException', message: 'An account with this email already exists.' };
-          } else if (errorType.includes('InvalidPasswordException')) {
-            // Extract detailed password requirements from error message if available
-            const detailedMessage = errorMessage.includes('password') 
-              ? errorMessage 
-              : 'Password does not meet requirements. Password must be at least 8 characters and contain uppercase, lowercase, number, and special character.';
-            throw { code: 'InvalidPasswordException', message: detailedMessage };
-          } else if (errorType.includes('InvalidParameterException')) {
-            throw { code: 'InvalidParameterException', message: errorMessage };
-          } else {
-            throw { code: errorType || 'SignUpException', message: errorMessage };
-          }
-        }
-        
-        // Create CognitoUser object for later use
-        const userData = {
-          Username: email,
-          Pool: userPool
-        };
-        const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
-
-        // Prepare patient registration data for API
-        const registrationData = {
-          name,
-          email,
-          role,
-          profileNote: '',
-          createdAt: new Date().toISOString(),
-          cognitoUserId: result.UserSub || email // Use Cognito UserSub if available
-        };
-
-        // Add health information if patient
-        if (role === 'patient' && healthData) {
-          registrationData.health = healthData;
-        }
-
-        // Send all registration information to API endpoint
-        try {
-          const apiResponse = await fetch(API_BASE_URL + API_ENDPOINTS.signup, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(registrationData)
-          });
-
-          if (!apiResponse.ok) {
-            const apiError = await apiResponse.json().catch(() => ({ message: 'Failed to save registration data' }));
-            console.warn('API Error:', apiError);
-            // Continue anyway - user is created in Cognito
-          } else {
-            const apiResult = await apiResponse.json();
-            console.log('Registration data sent successfully:', apiResult);
-          }
-        } catch (apiError) {
-          console.error('Error sending registration data to API:', apiError);
-          // Continue anyway - user is created in Cognito
-          // Optionally store for retry later
-          if (role === 'patient' && healthData) {
-            localStorage.setItem('hm.pendingHealthData', JSON.stringify(healthData));
-          }
-        }
-
-        // Store basic user info in localStorage for UI purposes
-        const user = {
-          id: email, // Use email as ID
-          name,
-          email,
-          role,
-          profileNote: '',
-          health: healthData
-        };
-        users.push(user);
-        setUsers(users);
-
-        alert('Account created successfully! Please check your email to verify your account, then sign in.');
-        window.location.href = './index.html';
-      } catch (error) {
-        console.error('Cognito Signup Error:', error);
-        
-        // Re-enable button
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
-        
-        // Handle specific Cognito errors
-        let errorMessage = 'Failed to create account. ';
-        if (error.code === 'UsernameExistsException') {
-          errorMessage += 'An account with this email already exists.';
-        } else if (error.code === 'InvalidPasswordException') {
-          errorMessage += error.message || 'Password does not meet requirements. Password must be at least 8 characters and contain uppercase, lowercase, number, and special character.';
-        } else if (error.message) {
-          errorMessage += error.message;
-        } else {
-          errorMessage += 'Please try again.';
-        }
-        
-        alert(errorMessage);
-      }
-    });
-  </script>
-</body>
+        </form>
+        <section class="section" id="confirmationSection" hidden>
+          <h2>Verify your email</h2>
+          <p class="helper-text">Enter the verification code sent to <strong id="confirmEmail"></strong>.</p>
+          <form id="confirmationForm" novalidate>
+            <label>
+              Confirmation code
+              <input type="text" name="code" inputmode="numeric" required />
+              <span class="error-text" data-error-for="code"></span>
+            </label>
+            <div class="layout-grid two-col">
+              <button type="submit" id="confirmBtn">Confirm account</button>
+              <button type="button" class="secondary" id="resendBtn">Resend code</button>
+            </div>
+          </form>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="./assets/signup.js"></script>
+  </body>
 </html>
-

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Doctor workspace</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="card page-header">
+        <div>
+          <h1>Doctor workspace</h1>
+          <p class="helper-text">Signed in as <span id="userEmail"></span></p>
+        </div>
+        <button type="button" class="secondary" id="signOutBtn">Sign out</button>
+      </header>
+
+      <section class="card" aria-labelledby="appointmentsHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="appointmentsHeading">Appointments</h2>
+            <p class="helper-text">Review new requests, confirm availability, and monitor your schedule.</p>
+          </div>
+          <div class="badge info" id="lastUpdated" aria-live="polite"></div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Appointment views">
+          <button type="button" role="tab" id="tabPending" class="active" aria-controls="pendingPanel" aria-selected="true">
+            Pending requests
+          </button>
+          <button type="button" role="tab" id="tabSchedule" aria-controls="schedulePanel" aria-selected="false">
+            My schedule
+          </button>
+        </div>
+        <div id="pendingPanel" role="tabpanel" aria-labelledby="tabPending">
+          <div id="pendingRequests" class="list" role="list"></div>
+        </div>
+        <div id="schedulePanel" role="tabpanel" aria-labelledby="tabSchedule" hidden>
+          <div id="confirmedSchedule" class="list" role="list"></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="summaryHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="summaryHeading">Patient vitals summary</h2>
+            <p class="helper-text">
+              Select an appointment to review the intake snapshot. Clinical documents remain in the secure data lake.
+            </p>
+          </div>
+        </div>
+        <div id="healthSummary" class="list" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./assets/doctor.js"></script>
+  </body>
+</html>
