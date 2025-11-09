@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import datetime
@@ -11,6 +12,9 @@ if PARENT_DIR not in sys.path:
     sys.path.append(PARENT_DIR)
 
 from common import appointments_table, emit_event, get_claim, json_response, require_role  # noqa: E402
+
+
+LOGGER = logging.getLogger(__name__)
 
 ALLOWED_STATUSES = {"PENDING", "CONFIRMED"}
 
@@ -41,5 +45,10 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
 
     appointments_table.put_item(Item=record)
     emit_event("CANCELLED", record)
+
+    LOGGER.info(
+        "appointment cancelled",
+        extra={"patientId": patient_id, "appointmentId": appointment_id, "status": record["status"]},
+    )
 
     return json_response({"status": "CANCELLED"})

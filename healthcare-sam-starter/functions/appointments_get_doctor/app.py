@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import datetime
@@ -12,7 +13,17 @@ PARENT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
 if PARENT_DIR not in sys.path:
     sys.path.append(PARENT_DIR)
 
-from common import appointments_table, get_claim, json_response, require_role, users_table  # noqa: E402
+from common import (  # noqa: E402
+    appointments_table,
+    get_claim,
+    json_response,
+    normalize_languages,
+    require_role,
+    users_table,
+)
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_since(value: Optional[str]) -> Optional[str]:
@@ -36,6 +47,16 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
     params = event.get("queryStringParameters") or {}
     since = parse_since(params.get("since"))
     status_filter = (params.get("status") or "").upper()
+
+    LOGGER.info(
+        "list doctor appointments",
+        extra={
+            "requestId": event.get("requestContext", {}).get("requestId"),
+            "doctorId": doctor_id,
+            "status": status_filter,
+            "since": since,
+        },
+    )
 
     key_condition = Key("doctorId").eq(doctor_id)
     if since:
@@ -67,5 +88,12 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
             for record in items:
                 if record.get("patientId") == patient_id and not record.get("patientEmail"):
                     record["patientEmail"] = patient.get("email")
+        LOGGER.info("enriched patient emails", extra={"count": len(unique_ids)})
 
+    for record in items:
+        profile = record.get("doctorProfile")
+        if isinstance(profile, dict):
+            profile["languages"] = normalize_languages(profile.get("languages"))
+
+    LOGGER.info("doctor appointments loaded", extra={"count": len(items)})
     return json_response({"items": items})

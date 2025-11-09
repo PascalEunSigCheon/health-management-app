@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from typing import Any, Dict, Optional
@@ -17,6 +18,9 @@ from common import (  # noqa: E402
     json_response,
     require_role,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 ALLOWED_STATUSES = {"PENDING", "CONFIRMED"}
 
@@ -61,6 +65,18 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
         record = fetch_record(path_patient, appointment_id) or fetch_record(path_patient, "latest")
     else:
         return json_response({"message": "forbidden"}, 403)
+
+    LOGGER.info(
+        "health summary requested",
+        extra={
+            "requestId": event.get("requestContext", {}).get("requestId"),
+            "requester": requester,
+            "patientId": path_patient,
+            "appointmentId": appointment_id,
+            "groups": list(groups),
+            "found": bool(record),
+        },
+    )
 
     if not record:
         return json_response({"item": {"metrics": {}, "updatedAt": None}})

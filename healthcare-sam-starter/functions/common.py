@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Iterable, Optional, Set
 
 import boto3
 
-LOGGER = logging.getLogger()
+
+LOGGER = logging.getLogger("health-app")
 LOGGER.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 dynamodb = boto3.resource("dynamodb")
@@ -23,6 +26,7 @@ def json_response(body: Dict[str, Any], status_code: int = 200) -> Dict[str, Any
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "Authorization,Content-Type",
+            "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
         },
         "body": json.dumps(body),
     }
@@ -34,15 +38,30 @@ def get_claim(event: Dict[str, Any], key: str) -> Optional[str]:
 
 
 def get_groups(event: Dict[str, Any]) -> Set[str]:
-    raw = get_claim(event, "cognito:groups") or ""
-    return {value.strip() for value in raw.split(",") if value.strip()}
+    raw = get_claim(event, "cognito:groups")
+    if not raw:
+        return set()
+    if isinstance(raw, str):
+        values: Iterable[str] = raw.split(",")
+    elif isinstance(raw, Iterable):
+        values = raw  # type: ignore[assignment]
+    else:
+        return set()
+    return {str(value).strip() for value in values if str(value).strip()}
 
 
 def require_role(event: Dict[str, Any], allowed_roles: list[str]) -> Optional[Dict[str, Any]]:
     group_set = get_groups(event)
     if not group_set:
+        LOGGER.warning(
+            "authorization failure", extra={"allowed": allowed_roles, "reason": "no-groups"}
+        )
         return json_response({"message": "forbidden"}, 403)
     if not group_set.intersection(set(allowed_roles)):
+        LOGGER.warning(
+            "authorization failure",
+            extra={"allowed": allowed_roles, "groups": list(group_set), "reason": "missing-role"},
+        )
         return json_response({"message": "forbidden"}, 403)
     return None
 
@@ -73,3 +92,20 @@ def emit_event(event_type: str, appointment: Dict[str, Any]) -> None:
             }
         ]
     )
+
+
+def normalize_languages(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        values = raw.split(",")
+    elif isinstance(raw, Iterable):
+        values = raw
+    else:
+        return []
+    cleaned = []
+    for value in values:
+        value_str = str(value).strip()
+        if value_str:
+            cleaned.append(value_str)
+    return cleaned
