@@ -14,34 +14,40 @@ A Cognito-protected, Doctolib-style prototype that lets patients log their sympt
 
 | Requirement | Notes |
 | --- | --- |
-| AWS CLI v2 | Authenticated against the target account (region: `eu-west-3`). |
-| Python 3.11 | Used for local static hosting and seed scripts. |
-| Deployed SAM stack | The backend is already live. Refer to the CloudFormation outputs below. |
+| Node.js 18+ | Required for lightweight tooling and future enhancements (no build step today). |
+| Python 3.11 | Powers the local static host (`python -m http.server`) and seed scripts. |
+| AWS SAM CLI | Used to deploy/maintain the pre-built backend stack (already deployed for demo). |
+| AWS account + deployed stack | Provision the SAM template from `healthcare-sam-starter/template.yaml`. All runtime config comes from the stack outputs. |
+| (Optional) AWS CLI v2 | Only needed for S3 uploads or manual seeding; day-to-day app usage happens entirely in the browser. |
 
-### CloudFormation outputs (current environment)
+### CloudFormation outputs you need
 
-```json
-{
-  "apiBaseUrl": "https://jxwfu7p6jg.execute-api.eu-west-3.amazonaws.com/v1",
-  "region": "eu-west-3",
-  "userPoolId": "eu-west-3_qHf4LOBNa",
-  "userPoolClientId": "3scslu2a91ae8en1v93r1225uv",
-  "doctorMatchEndpoint": ""
-}
-```
+After deploying the SAM template, grab these outputs from the CloudFormation console (or `sam deploy` summary) and copy them into [`config.json`](./config.json):
 
-Update [`config.json`](./config.json) if these values change.
+| Output key | `config.json` field |
+| --- | --- |
+| `ApiBaseUrl` | `apiBaseUrl` |
+| `Region` | `region` |
+| `UserPoolId` | `userPoolId` |
+| `UserPoolClientId` | `userPoolClientId` |
+| `DoctorMatchEndpoint` (optional) | `doctorMatchEndpoint` |
+
+`config.json` must live alongside the HTML files both locally and in S3 so the frontend knows which backend to call.
 
 ---
 
 ## 2. Run the frontend locally
 
-```bash
-python -m http.server 8080
-# Visit http://localhost:8080
-```
+1. Populate [`config.json`](./config.json) with the CloudFormation outputs from the previous section.
+2. Start a static file server from the project root:
 
-The site is framework-free and can run from any static host as long as `config.json` is present alongside the HTML files.
+   ```bash
+   python -m http.server 8080
+   ```
+
+3. Visit [http://localhost:8080](http://localhost:8080).
+
+The site is framework-free and can run from any static host as long as `config.json` is colocated with the HTML files.
 
 ---
 
@@ -65,7 +71,7 @@ The repository bundles curated demo users covering multiple specialties, languag
 ### Option B – seed via CLI (no email required)
 
 ```bash
-USER_POOL_ID=eu-west-3_qHf4LOBNa
+USER_POOL_ID=<your-user-pool-id>
 DEFAULT_PASSWORD='HealthPass!1'
 
 # Doctor example (Cardiology, Paris)
@@ -185,14 +191,14 @@ All responses are JSON with CORS headers (`Access-Control-Allow-Origin: *`). Err
 ## 6. Deploy to S3 (static hosting)
 
 ```bash
-aws s3 sync . s3://hm-static-site-dev-810278669680 \
+aws s3 sync . s3://<your-static-site-bucket> \
   --exclude ".git/*" \
   --exclude "healthcare-sam-starter/*" \
   --delete
-aws s3 website s3://hm-static-site-dev-810278669680 --index-document index.html
+aws s3 website s3://<your-static-site-bucket> --index-document index.html
 ```
 
-Ensure the bucket policy allows public `GET` access (or front the bucket with CloudFront + OAC in production). Upload `config.json` alongside the HTML files.
+Replace `<your-static-site-bucket>` with the `StaticSiteBucket` output from CloudFormation. Ensure the bucket policy allows public `GET` access (or front the bucket with CloudFront + OAC in production). Upload `config.json` alongside the HTML files.
 
 ---
 

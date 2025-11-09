@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import time
@@ -20,9 +21,13 @@ from common import (  # noqa: E402
     get_claim,
     health_index_table,
     json_response,
+    normalize_languages,
     require_role,
     users_table,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 MANDATORY_VITAL_FIELDS = {
@@ -120,6 +125,16 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
     recommended_specialty = body.get("recommendedSpecialty")
     vitals = body.get("vitals")
 
+    LOGGER.info(
+        "create appointment request",
+        extra={
+            "requestId": event.get("requestContext", {}).get("requestId"),
+            "patientId": patient_id,
+            "doctorId": doctor_id,
+            "reasonCode": reason_code,
+        },
+    )
+
     if not doctor_id or not slot_iso:
         return json_response({"message": "doctorId and slotISO are required"}, 400)
     if reason_code not in ALLOWED_REASON_CODES:
@@ -148,11 +163,15 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
     if avail_slots and normalized_slot not in avail_slots:
         return json_response({"message": "slot not published by doctor"}, 400)
 
-    clashes = appointments_table.query(
-        IndexName="GSI1",
-        KeyConditionExpression=Key("doctorId").eq(doctor_id) & Key("slotISO").eq(normalized_slot),
-        Limit=1,
-    )
+    try:
+        clashes = appointments_table.query(
+            IndexName="GSI1",
+            KeyConditionExpression=Key("doctorId").eq(doctor_id) & Key("slotISO").eq(normalized_slot),
+            Limit=1,
+        )
+    except Exception:  # pylint: disable=broad-except
+        LOGGER.exception("doctor availability lookup failed")
+        return json_response({"message": "unable to check availability"}, 500)
     if clashes.get("Count", 0) > 0:
         return json_response({"message": "slot not available"}, 409)
 
@@ -178,7 +197,11 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
         "vitals": summary_vitals,
     }
 
-    appointments_table.put_item(Item=item)
+    try:
+        appointments_table.put_item(Item=item)
+    except Exception:  # pylint: disable=broad-except
+        LOGGER.exception("failed to persist appointment")
+        return json_response({"message": "unable to create appointment"}, 500)
 
     health_record = {
         "patientId": patient_id,
@@ -187,17 +210,29 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
         "reasonCode": reason_code,
         "metrics": summary_vitals,
     }
-    health_index_table.put_item(Item=health_record)
-    health_index_table.put_item(
-        Item={
-            "patientId": patient_id,
-            "recordId": "latest",
-            "updatedAt": created_at,
-            "reasonCode": reason_code,
-            "metrics": summary_vitals,
-        }
-    )
+    try:
+        health_index_table.put_item(Item=health_record)
+        health_index_table.put_item(
+            Item={
+                "patientId": patient_id,
+                "recordId": "latest",
+                "updatedAt": created_at,
+                "reasonCode": reason_code,
+                "metrics": summary_vitals,
+            }
+        )
+    except Exception:  # pylint: disable=broad-except
+        LOGGER.exception("failed to persist health index")
+        return json_response({"message": "unable to store vitals"}, 500)
+
+    languages = normalize_languages(profile.get("languages"))
+    item["doctorProfile"] = {
+        "specialty": profile.get("specialty"),
+        "city": profile.get("city") or profile.get("location"),
+        "languages": languages,
+    }
 
     emit_event("BOOKED", item)
+    LOGGER.info("appointment created", extra={"appointmentId": appointment_id})
 
     return json_response({"appointmentId": appointment_id, "status": "PENDING"}, 201)

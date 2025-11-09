@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from typing import Any, Dict
@@ -11,7 +12,17 @@ PARENT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
 if PARENT_DIR not in sys.path:
     sys.path.append(PARENT_DIR)
 
-from common import appointments_table, get_claim, json_response, require_role, users_table  # noqa: E402
+from common import (  # noqa: E402
+    appointments_table,
+    get_claim,
+    json_response,
+    normalize_languages,
+    require_role,
+    users_table,
+)
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def lambda_handler(event: Dict[str, Any], _context: Any):
@@ -22,6 +33,14 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
     patient_id = get_claim(event, "sub")
     if not patient_id:
         return json_response({"message": "unauthorized"}, 401)
+
+    LOGGER.info(
+        "list patient appointments",
+        extra={
+            "requestId": event.get("requestContext", {}).get("requestId"),
+            "patientId": patient_id,
+        },
+    )
 
     result = appointments_table.query(
         IndexName="GSI2",
@@ -41,6 +60,12 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
         for appointment in items:
             if appointment.get("doctorId") == doctor_id:
                 appointment.setdefault("doctorProfile", doctor.get("doctorProfile") or {})
+                profile = appointment["doctorProfile"]
+                if isinstance(profile, dict):
+                    profile["languages"] = normalize_languages(profile.get("languages"))
+                    if profile.get("location") and not profile.get("city"):
+                        profile["city"] = profile["location"]
                 appointment.setdefault("doctorName", f"{doctor.get('firstName', '')} {doctor.get('lastName', '')}".strip())
 
+    LOGGER.info("patient appointments loaded", extra={"count": len(items)})
     return json_response({"items": items})

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from typing import Any, Dict
@@ -12,6 +13,9 @@ if PARENT_DIR not in sys.path:
     sys.path.append(PARENT_DIR)
 
 from common import get_claim, health_index_table, json_response, require_role  # noqa: E402
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def lambda_handler(event: Dict[str, Any], _context: Any):
@@ -33,5 +37,14 @@ def lambda_handler(event: Dict[str, Any], _context: Any):
     for item in items:
         if "summary" in item and "metrics" not in item:
             item["metrics"] = item.pop("summary")
+
+    LOGGER.info(
+        "patient health index retrieved",
+        extra={
+            "requestId": event.get("requestContext", {}).get("requestId"),
+            "patientId": patient_id,
+            "count": len(items),
+        },
+    )
 
     return json_response({"items": items})
