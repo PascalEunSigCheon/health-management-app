@@ -10,54 +10,69 @@
     <div class="demo-badge"></div>
     <main>
       <section class="card" aria-labelledby="welcomeTitle">
-        <h1 id="welcomeTitle">🏥 Health Management Platform</h1>
-        <p class="text-muted" style="font-size: 1.1rem; margin-top: 8px;">
+        <h1 id="welcomeTitle">Health Management Platform</h1>
+        <p class="text-muted lead">
           Modern healthcare coordination platform for patients and providers. Book appointments, review health summaries, and access secure medical information.
         </p>
         
         <div class="feature-grid">
           <div class="feature-card">
-            <div class="feature-icon">❤️</div>
+            <div class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <circle cx="12" cy="8" r="3"></circle>
+                <path d="M5 20c1.5-4 6.5-4 7-4s5.5 0 7 4"></path>
+              </svg>
+            </div>
             <h3>Patient Care</h3>
             <p class="helper-text">Book appointments, track vitals, and manage your health journey.</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">🩺</div>
+            <div class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M4 12v2a8 8 0 0 0 16 0v-2"></path>
+                <path d="M12 7v5"></path>
+              </svg>
+            </div>
             <h3>Doctor Portal</h3>
             <p class="helper-text">Review patient requests, confirm appointments, and access medical records.</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">🔒</div>
+            <div class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+                <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+              </svg>
+            </div>
             <h3>Secure & Private</h3>
             <p class="helper-text">Role-based access with enterprise-grade security and HIPAA compliance.</p>
           </div>
         </div>
         
-        <div class="section" id="authState" hidden style="margin-top: 32px;">
+        <div class="section mt-32" id="authState" hidden>
           <h2>Welcome back! 👋</h2>
           <p class="helper-text">Signed in as <strong id="sessionEmail"></strong> (<span id="sessionRole"></span>)</p>
-          <div class="layout-grid two-col" style="margin-top: 20px;">
+          <div class="layout-grid two-col mt-20">
             <a class="button-link" href="./patient.html" id="patientEntry" hidden>
-              <button type="button">❤️ Go to Patient Portal</button>
+              <button type="button">Patient Portal</button>
             </a>
             <a class="button-link" href="./doctor.html" id="doctorEntry" hidden>
-              <button type="button">🩺 Go to Doctor Portal</button>
+              <button type="button">Doctor Portal</button>
             </a>
             <button type="button" class="secondary" id="signOutBtn">Sign out</button>
           </div>
         </div>
         
-        <div class="section" id="guestState" style="margin-top: 32px;">
+        <div class="section mt-32" id="guestState">
           <h2>Get Started Today</h2>
           <p class="helper-text">
             Create an account or sign in to access your patient dashboard or doctor workspace.
           </p>
-          <div class="layout-grid two-col" style="margin-top: 20px;">
+          <div class="layout-grid two-col mt-20">
             <a class="button-link" href="./signup.html">
-              <button type="button">✨ Create Account</button>
+              <button type="button">Create Account</button>
             </a>
             <a class="button-link" href="./signin.html">
-              <button type="button" class="secondary">🔑 Sign In</button>
+              <button type="button" class="secondary">Sign In</button>
             </a>
           </div>
         </div>

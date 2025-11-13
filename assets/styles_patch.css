@@ -1,0 +1,9 @@
+/* temporary patch file - will be merged into styles.css */
+
+.lead {
+  font-size: 1.1rem;
+  margin-top: 8px;
+}
+
+.mt-32 { margin-top: 32px; }
+.mt-20 { margin-top: 20px; }

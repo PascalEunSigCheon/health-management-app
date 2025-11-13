@@ -609,20 +609,20 @@ The Health Management Platform is a full-stack healthcare application that strea
 
 ---
 
-## ✨ Key Features
+## Key features
 
 ### For Patients
-- 🔍 **Smart Doctor Search**: Find doctors by specialty, location, and availability
-- 📅 **Appointment Booking**: Select time slots and book appointments with vital signs submission
-- 💉 **Vitals Tracking**: Record and monitor blood pressure, BMI, glucose levels, and more
-- 🩺 **Health Risk Assessment**: ML-powered diabetes risk prediction tool
-- 📱 **Responsive Design**: Professional healthcare-inspired UI optimized for all devices
+- **Smart doctor search**: Find doctors by specialty, location, and availability
+- **Appointment booking**: Select time slots and book appointments with vital signs submission
+- **Vitals tracking**: Record and monitor blood pressure, BMI, glucose levels, and more
+- **Health risk assessment**: ML-powered diabetes risk prediction tool
+- **Responsive design**: Professional healthcare-inspired UI optimized for all devices
 
 ### For Doctors
-- 📊 **Request Management**: View, confirm, or decline patient appointment requests
-- 👥 **Patient Vitals Dashboard**: Access comprehensive patient health metrics
-- 🗓️ **Schedule Management**: Maintain availability and manage appointment slots
-- 🎨 **Professional Interface**: Clinical blue design inspired by leading healthcare institutions
+- **Request management**: View, confirm, or decline patient appointment requests
+- **Patient vitals dashboard**: Access comprehensive patient health metrics
+- **Schedule management**: Maintain availability and manage appointment slots
+- **Professional interface**: Clinical blue design inspired by leading healthcare institutions
 
 ### Technical Highlights
 - ⚡ **Serverless Architecture**: Cost-effective, auto-scaling AWS Lambda functions
@@ -929,7 +929,7 @@ curl -X GET https://<api-url>/v1/appointments/patient \
 
 ---
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### Issue: "Uncaught ReferenceError: gatherVitals is not defined"
 **Solution**: Fixed in latest version. Ensure `patient.js` uses `collectVitals()`.
@@ -1156,4 +1156,4 @@ For issues, questions, or contributions:
 
 ---
 
-**Built with ❤️ for modern healthcare**
+**Built for modern healthcare**
