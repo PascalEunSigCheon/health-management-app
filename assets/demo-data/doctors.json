@@ -1,0 +1,22 @@
+[
+  { "email": "cardio.demo1@example.com", "firstName": "Alice", "lastName": "Heart", "specialty": "Cardiology", "city": "Paris" },
+  { "email": "cardio.demo2@example.com", "firstName": "Bernard", "lastName": "Pulse", "specialty": "Cardiology", "city": "Lyon" },
+  { "email": "derm.demo1@example.com", "firstName": "Clara", "lastName": "Skin", "specialty": "Dermatology", "city": "Marseille" },
+  { "email": "derm.demo2@example.com", "firstName": "David", "lastName": "Derm", "specialty": "Dermatology", "city": "Nice" },
+  { "email": "general.demo1@example.com", "firstName": "Eva", "lastName": "Med", "specialty": "General Medicine", "city": "Toulouse" },
+  { "email": "general.demo2@example.com", "firstName": "Frank", "lastName": "Health", "specialty": "General Medicine", "city": "Paris" },
+  { "email": "pulmo.demo1@example.com", "firstName": "Grace", "lastName": "Lung", "specialty": "Pulmonology", "city": "Lyon" },
+  { "email": "pulmo.demo2@example.com", "firstName": "Hector", "lastName": "Breath", "specialty": "Pulmonology", "city": "Marseille" },
+  { "email": "gastro.demo1@example.com", "firstName": "Isabelle", "lastName": "Gut", "specialty": "Gastroenterology", "city": "Nice" },
+  { "email": "gastro.demo2@example.com", "firstName": "Jean", "lastName": "Digest", "specialty": "Gastroenterology", "city": "Toulouse" },
+  { "email": "ortho.demo1@example.com", "firstName": "Katerina", "lastName": "Bone", "specialty": "Orthopedics", "city": "Paris" },
+  { "email": "ortho.demo2@example.com", "firstName": "Leo", "lastName": "Joint", "specialty": "Orthopedics", "city": "Lyon" },
+  { "email": "neuro.demo1@example.com", "firstName": "Marta", "lastName": "Brain", "specialty": "Neurology", "city": "Marseille" },
+  { "email": "neuro.demo2@example.com", "firstName": "Nicolas", "lastName": "Nerve", "specialty": "Neurology", "city": "Nice" },
+  { "email": "peds.demo1@example.com", "firstName": "Olivia", "lastName": "Child", "specialty": "Pediatrics", "city": "Toulouse" },
+  { "email": "peds.demo2@example.com", "firstName": "Pierre", "lastName": "Youth", "specialty": "Pediatrics", "city": "Paris" },
+  { "email": "oph.demo1@example.com", "firstName": "Quentin", "lastName": "Eye", "specialty": "Ophthalmology", "city": "Lyon" },
+  { "email": "oph.demo2@example.com", "firstName": "Rachelle", "lastName": "Vision", "specialty": "Ophthalmology", "city": "Marseille" },
+  { "email": "ent.demo1@example.com", "firstName": "Samuel", "lastName": "Ear", "specialty": "ENT", "city": "Nice" },
+  { "email": "ent.demo2@example.com", "firstName": "Therese", "lastName": "Throat", "specialty": "ENT", "city": "Toulouse" }
+]

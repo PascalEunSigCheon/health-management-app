@@ -1,0 +1,573 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Health Management Platform - Cognito auth, Appointments API, Data Lake
+  plumbing
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        USERS_TABLE_NAME:
+          Ref: UsersTable
+        APPOINTMENTS_TABLE_NAME:
+          Ref: AppointmentsTable
+        PATIENT_HEALTH_INDEX_TABLE_NAME:
+          Ref: PatientHealthIndexTable
+        DEMO_MODE: 'true'
+        DEFAULT_DEMO_DOCTOR_ID: oph.demo1@example.com
+        POWERTOOLS_SERVICE_NAME: health-platform
+        LOG_LEVEL: INFO
+        APPOINTMENT_EVENT_BUS_NAME: ''
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    Description: Environment identifier suffix
+Resources:
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/http-api/health-platform-${EnvironmentName}
+      RetentionInDays: 30
+  PredictProxyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: predict_proxy.app.lambda_handler
+      Runtime: python3.11
+      CodeUri: PredictProxyFunction
+      Environment:
+        Variables:
+          DIABETES_MODEL_URL: https://kydqfodd48.execute-api.eu-west-3.amazonaws.com/default/test-model-endpoint
+          USERS_TABLE_NAME:
+            Ref: UsersTable
+      Events:
+        PredictApi:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /predict
+            Method: POST
+    Metadata:
+      SamResourceId: PredictProxyFunction
+  ApiGateway:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: v1
+      CorsConfiguration:
+        AllowMethods:
+        - GET
+        - POST
+        - OPTIONS
+        AllowOrigins:
+        - '*'
+        AllowHeaders:
+        - Authorization
+        - Content-Type
+  ApiAccessLog:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/apigateway/health-platform-${EnvironmentName}
+      RetentionInDays: 30
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: userId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: userId
+        KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      TableName:
+        Fn::Sub: health-users-${EnvironmentName}
+  AppointmentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: appointmentId
+        AttributeType: S
+      - AttributeName: doctorId
+        AttributeType: S
+      - AttributeName: patientId
+        AttributeType: S
+      - AttributeName: slotISO
+        AttributeType: S
+      KeySchema:
+      - AttributeName: appointmentId
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: GSI1
+        KeySchema:
+        - AttributeName: doctorId
+          KeyType: HASH
+        - AttributeName: slotISO
+          KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
+      - IndexName: GSI2
+        KeySchema:
+        - AttributeName: patientId
+          KeyType: HASH
+        - AttributeName: slotISO
+          KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+      TableName:
+        Fn::Sub: health-appointments-${EnvironmentName}
+  PatientHealthIndexTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: patientId
+        AttributeType: S
+      - AttributeName: recordId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: patientId
+        KeyType: HASH
+      - AttributeName: recordId
+        KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+      TableName:
+        Fn::Sub: health-patient-health-index-${EnvironmentName}
+  StaticSiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Sub: hm-static-site-${EnvironmentName}-${AWS::AccountId}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+        - ObjectOwnership: BucketOwnerPreferred
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName:
+        Fn::Sub: health-users-${EnvironmentName}
+      AutoVerifiedAttributes:
+      - email
+      UsernameAttributes:
+      - email
+      Schema:
+      - Name: email
+        AttributeDataType: String
+        Required: true
+      - Name: given_name
+        AttributeDataType: String
+        Mutable: true
+      - Name: family_name
+        AttributeDataType: String
+        Mutable: true
+      - Name: role
+        AttributeDataType: String
+        Mutable: true
+      - Name: specialty
+        AttributeDataType: String
+        Mutable: true
+      - Name: languages
+        AttributeDataType: String
+        Mutable: true
+      - Name: location
+        AttributeDataType: String
+        Mutable: true
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: health-app-client
+      UserPoolId:
+        Ref: CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_REFRESH_TOKEN_AUTH
+      - ALLOW_USER_SRP_AUTH
+      - ALLOW_USER_PASSWORD_AUTH
+      SupportedIdentityProviders:
+      - COGNITO
+      PreventUserExistenceErrors: ENABLED
+      CallbackURLs:
+      - Fn::Sub: https://health-${EnvironmentName}.${AWS::Region}.cloudfront.net
+      - http://localhost:3000
+      LogoutURLs:
+      - Fn::Sub: https://health-${EnvironmentName}.${AWS::Region}.cloudfront.net
+      - http://localhost:3000
+  CognitoGroupPatient:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: PATIENT
+      UserPoolId:
+        Ref: CognitoUserPool
+  CognitoGroupDoctor:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: DOCTOR
+      UserPoolId:
+        Ref: CognitoUserPool
+  AuthPostConfirmationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AuthPostConfirmationFunction
+      Handler: app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          Resource:
+            Fn::GetAtt:
+            - UsersTable
+            - Arn
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:AdminAddUserToGroup
+          Resource: '*'
+      Events:
+        PostConfirmation:
+          Type: Cognito
+          Properties:
+            UserPool:
+              Ref: CognitoUserPool
+            Trigger: PostConfirmation
+    Metadata:
+      SamResourceId: AuthPostConfirmationFunction
+  DoctorsGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: DoctorsGetFunction
+      Handler: doctors_get.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          - dynamodb:Scan
+          Resource:
+            Fn::GetAtt:
+            - UsersTable
+            - Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /doctors
+            Method: GET
+    Metadata:
+      SamResourceId: DoctorsGetFunction
+  AppointmentsCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AppointmentsCreateFunction
+      Handler: appointments_create.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          - dynamodb:Query
+          - dynamodb:DeleteItem
+          Resource:
+          - Fn::GetAtt:
+            - AppointmentsTable
+            - Arn
+          - Fn::Sub: ${AppointmentsTable.Arn}/index/*
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          Resource:
+            Fn::GetAtt:
+            - UsersTable
+            - Arn
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          Resource:
+            Fn::GetAtt:
+            - PatientHealthIndexTable
+            - Arn
+        - Effect: Allow
+          Action:
+          - events:PutEvents
+          Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /appointments
+            Method: POST
+    Metadata:
+      SamResourceId: AppointmentsCreateFunction
+  AppointmentsGetPatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AppointmentsGetPatientFunction
+      Handler: appointments_get_patient.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          Resource:
+            Fn::Sub: ${AppointmentsTable.Arn}/index/*
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          Resource:
+            Fn::GetAtt:
+            - UsersTable
+            - Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /appointments/patient
+            Method: GET
+    Metadata:
+      SamResourceId: AppointmentsGetPatientFunction
+  AppointmentsGetDoctorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AppointmentsGetDoctorFunction
+      Handler: appointments_get_doctor.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          Resource:
+            Fn::Sub: ${AppointmentsTable.Arn}/index/*
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          Resource:
+            Fn::GetAtt:
+            - UsersTable
+            - Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /appointments/doctor
+            Method: GET
+    Metadata:
+      SamResourceId: AppointmentsGetDoctorFunction
+  AppointmentsConfirmFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AppointmentsConfirmFunction
+      Handler: appointments_confirm.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:UpdateItem
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          Resource:
+          - Fn::GetAtt:
+            - AppointmentsTable
+            - Arn
+        - Effect: Allow
+          Action:
+          - events:PutEvents
+          Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /appointments/{appointmentId}/confirm
+            Method: POST
+    Metadata:
+      SamResourceId: AppointmentsConfirmFunction
+  AppointmentsDeclineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AppointmentsDeclineFunction
+      Handler: appointments_decline.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:UpdateItem
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          Resource:
+          - Fn::GetAtt:
+            - AppointmentsTable
+            - Arn
+        - Effect: Allow
+          Action:
+          - events:PutEvents
+          Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /appointments/{appointmentId}/decline
+            Method: POST
+    Metadata:
+      SamResourceId: AppointmentsDeclineFunction
+  AppointmentsCancelFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AppointmentsCancelFunction
+      Handler: appointments_cancel.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+          Resource:
+          - Fn::GetAtt:
+            - AppointmentsTable
+            - Arn
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:DeleteItem
+          - dynamodb:Query
+          Resource:
+            Fn::GetAtt:
+            - PatientHealthIndexTable
+            - Arn
+        - Effect: Allow
+          Action:
+          - events:PutEvents
+          Resource: '*'
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /appointments/{appointmentId}/cancel
+            Method: POST
+    Metadata:
+      SamResourceId: AppointmentsCancelFunction
+  PatientHealthIndexGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: PatientHealthIndexGetFunction
+      Handler: patient_health_index_get.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          Resource:
+            Fn::GetAtt:
+            - PatientHealthIndexTable
+            - Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /patient/{patientId}/health/index
+            Method: GET
+    Metadata:
+      SamResourceId: PatientHealthIndexGetFunction
+  PatientHealthSummaryGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: PatientHealthSummaryGetFunction
+      Handler: patient_health_summary_get.app.lambda_handler
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          Resource:
+          - Fn::GetAtt:
+            - AppointmentsTable
+            - Arn
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          - dynamodb:GetItem
+          Resource:
+            Fn::GetAtt:
+            - PatientHealthIndexTable
+            - Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ApiGateway
+            Path: /patient-health/{patientId}/latest
+            Method: GET
+    Metadata:
+      SamResourceId: PatientHealthSummaryGetFunction
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL for the HTTP API
+    Value:
+      Fn::Sub: https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/v1
+  UserPoolId:
+    Description: Cognito User Pool Id
+    Value:
+      Ref: CognitoUserPool
+  UserPoolClientId:
+    Description: Cognito App Client Id
+    Value:
+      Ref: CognitoUserPoolClient
+  Region:
+    Description: AWS Region
+    Value:
+      Ref: AWS::Region
+  StaticSiteBucket:
+    Description: Bucket that hosts the static site and config.json
+    Value:
+      Ref: StaticSiteBucket
+  DoctorMatchEndpoint:
+    Description: Placeholder for optional SageMaker endpoint
+    Value: ''
+  UsersTableName:
+    Description: DynamoDB Users table name
+    Value:
+      Ref: UsersTable

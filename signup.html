@@ -10,7 +10,9 @@
     <main>
       <section class="card" aria-labelledby="signupTitle">
         <h1 id="signupTitle">Create an account</h1>
-        <p class="text-muted">All fields are required unless marked optional.</p>
+        <p class="text-muted">
+          All fields are required unless marked optional. Choose your role to unlock the relevant workspace.
+        </p>
         <form id="signupForm" novalidate>
           <div class="layout-grid two-col">
             <label>
@@ -31,7 +33,13 @@
           </label>
           <label>
             Password
-            <input type="password" name="password" autocomplete="new-password" required aria-describedby="passwordHelp" />
+            <input
+              type="password"
+              name="password"
+              autocomplete="new-password"
+              required
+              aria-describedby="passwordHelp"
+            />
             <span id="passwordHelp" class="helper-text">At least 8 characters with upper, lower, number and symbol.</span>
             <span class="error-text" data-error-for="password"></span>
           </label>
@@ -44,33 +52,39 @@
             </select>
             <span class="error-text" data-error-for="role"></span>
           </label>
-          <div id="doctorFields" hidden>
+          <fieldset id="doctorFields" class="fieldset" hidden>
+            <legend>Doctor profile</legend>
+            <p class="helper-text">
+              Provide your clinical details. Specialty and city are captured as Cognito custom attributes for downstream provisioning.
+            </p>
             <div class="layout-grid two-col">
               <label>
                 Specialty
-                <input type="text" name="specialty" placeholder="Cardiology" />
+                <select name="specialty">
+                  <option value="">Select specialty</option>
+                </select>
                 <span class="error-text" data-error-for="specialty"></span>
               </label>
               <label>
-                Languages (comma separated)
-                <input type="text" name="languages" placeholder="English, Spanish" />
+                Primary city
+                <select name="city">
+                  <option value="">Select city</option>
+                </select>
+                <span class="error-text" data-error-for="city"></span>
               </label>
             </div>
-            <label>
-              Location
-              <input type="text" name="location" placeholder="City, Country" />
-              <span class="error-text" data-error-for="location"></span>
-            </label>
-          </div>
+          </fieldset>
           <div class="layout-grid two-col">
             <button type="submit" id="signupBtn">Create account</button>
-            <a class="button-link" href="./signin.html"><button type="button" class="secondary">Have an account?</button></a>
+            <a class="button-link" href="./signin.html">
+              <button type="button" class="secondary">Have an account?</button>
+            </a>
           </div>
         </form>
         <section class="section" id="confirmationSection" hidden>
           <h2>Verify your email</h2>
           <p class="helper-text">Enter the verification code sent to <strong id="confirmEmail"></strong>.</p>
-          <form id="confirmationForm">
+          <form id="confirmationForm" novalidate>
             <label>
               Confirmation code
               <input type="text" name="code" inputmode="numeric" required />

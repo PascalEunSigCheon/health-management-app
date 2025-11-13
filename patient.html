@@ -3,86 +3,114 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Patient workspace</title>
+    <title>Patient Portal - Health Management Platform</title>
     <link rel="stylesheet" href="./assets/styles.css" />
   </head>
   <body>
     <main>
-      <header class="card" style="margin-bottom: 24px;">
-        <div class="section-header">
-          <div>
-            <h1>Patient workspace</h1>
-            <p class="helper-text">Signed in as <span id="userEmail"></span></p>
-          </div>
+      <header class="card page-header">
+        <div>
+          <h1>❤️ Patient Portal</h1>
+          <p class="helper-text">👤 <strong id="userName"></strong> • <span id="userEmail"></span></p>
+        </div>
+        <div class="page-actions">
           <button type="button" class="secondary" id="signOutBtn">Sign out</button>
         </div>
       </header>
 
-      <section class="section" aria-labelledby="findDoctorHeading">
+      <section class="card" aria-labelledby="intakeHeading">
         <div class="section-header">
           <div>
-            <h2 id="findDoctorHeading">Find a doctor</h2>
-            <p class="helper-text">Filter by specialty, location or language.</p>
+            <h2 id="intakeHeading">🏥 Book an Appointment</h2>
+            <p class="helper-text">
+              Select a specialty, enter your vitals, and search for available doctors in your area.
+            </p>
           </div>
         </div>
-        <form id="doctorSearchForm" class="layout-grid two-col" novalidate>
+        <form id="intakeForm" class="vitals-form" novalidate>
           <label>
-            Specialty
-            <input type="text" name="specialty" placeholder="Dermatology" />
+            <strong>Medical Specialty</strong>
+            <select id="specialtySelect" required>
+              <option value="">Select specialty</option>
+            </select>
+            <span class="error-text" data-error-for="specialty"></span>
           </label>
-          <label>
-            Location
-            <input type="text" name="location" placeholder="Seattle" />
-          </label>
-          <label>
-            Language
-            <input type="text" name="language" placeholder="English" />
-          </label>
-          <div>
-            <button type="submit">Search</button>
+
+          <div class="vitals-section" aria-labelledby="mandatoryHeading">
+            <h3 id="mandatoryHeading">📋 Your Vital Signs</h3>
+            <div class="layout-grid two-col" id="mandatoryVitals"></div>
+          </div>
+
+          <div class="layout-grid two-col" id="searchFilters">
+            <label>
+              <strong>Preferred City</strong>
+              <select id="locationFilter">
+                <option value="">Any location</option>
+              </select>
+            </label>
+            <label>
+              <strong>Availability Window</strong>
+              <select id="slotWindow">
+                <option value="3">Next 3 days</option>
+                <option value="7">Next 7 days</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" id="findDoctorsBtn">🔍 Find Available Doctors</button>
           </div>
         </form>
-        <div class="list" id="doctorResults" role="list"></div>
       </section>
 
-      <section class="section" aria-labelledby="appointmentsHeading">
+      <section class="card" aria-labelledby="doctorSearchHeading">
         <div class="section-header">
           <div>
-            <h2 id="appointmentsHeading">My appointments</h2>
-            <p class="helper-text">Track pending and confirmed bookings.</p>
+            <h2 id="doctorSearchHeading">👨‍⚕️ Available Doctors</h2>
+            <p class="helper-text">Doctors matching your search criteria. Click on a time slot to book.</p>
           </div>
         </div>
-        <div class="list" id="appointmentsList" role="list"></div>
+        <div id="doctorResults" class="list" role="list" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="appointmentsHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="appointmentsHeading">📅 My Appointments</h2>
+            <p class="helper-text">View your upcoming appointments and their current status. You can cancel if needed.</p>
+          </div>
+        </div>
+        <div class="list" id="appointmentsList" role="list" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="latestVitalsHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="latestVitalsHeading">💉 Latest Submitted Vitals</h2>
+            <p class="helper-text">Your most recent vital signs recorded in the patient health index.</p>
+          </div>
+        </div>
+        <div id="healthIndexPanel" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="diabetesPredictorHeading">
+        <div class="section-header">
+          <div>
+            <h2 id="diabetesPredictorHeading">🩺 Diabetes Risk Assessment</h2>
+            <p class="helper-text">Interactive risk predictor using machine learning. Results are for educational purposes only and are not saved.</p>
+          </div>
+        </div>
+        <form id="diabetesPredictorForm" class="vitals-form" novalidate>
+          <div class="layout-grid two-col" id="predictorFields">
+            <!-- Fields will be rendered by JS -->
+          </div>
+          <div class="form-actions">
+            <button type="button" id="predictBtn">🔬 Predict Diabetes Risk</button>
+          </div>
+          <div id="diabetesResult" class="helper-text" aria-live="polite"></div>
+        </form>
       </section>
     </main>
-
-    <div class="modal-backdrop" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="bookingTitle">
-      <div class="modal" id="bookingModal">
-        <div class="section-header">
-          <h2 id="bookingTitle">Book appointment</h2>
-          <button type="button" class="secondary" data-close-modal>&times;</button>
-        </div>
-        <p class="helper-text">Booking with <strong id="selectedDoctor"></strong></p>
-        <form id="bookingForm" class="layout-grid" novalidate>
-          <label>
-            Date
-            <input type="date" name="appointmentDate" required />
-          </label>
-          <label>
-            Time (24-hour)
-            <input type="time" name="appointmentTime" required />
-          </label>
-          <label>
-            Reason (optional)
-            <textarea name="reason" rows="3" placeholder="Symptoms or context"></textarea>
-          </label>
-          <div class="layout-grid two-col">
-            <button type="submit">Request appointment</button>
-            <button type="button" class="secondary" data-close-modal>Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
 
     <script type="module" src="./assets/patient.js"></script>
   </body>

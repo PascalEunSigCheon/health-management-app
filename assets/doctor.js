@@ -3,210 +3,267 @@ import {
   disableWhilePending,
   fetchJSON,
   formatDateTime,
-  getUserEmail,
+  getSession,
   loadConfig,
   requireRole,
   showToast,
   statusBadge,
 } from "./app.js";
 
-let pollHandle = null;
-let currentAppointmentId = null;
+const state = {
+  pending: [],
+  confirmed: [],
+  selected: null,
+  pollHandle: null,
+};
 
-function splitAppointments(items) {
-  const pending = [];
-  const confirmed = [];
-  (items || []).forEach((item) => {
-    if (item.status === "PENDING") pending.push(item);
-    if (item.status === "CONFIRMED") confirmed.push(item);
-  });
-  return { pending, confirmed };
+// Reason codes have been removed from the simplified application.  The
+// appointment card only displays the slot time.
+
+function updateLastUpdated() {
+  const label = document.querySelector("#lastUpdated");
+  label.textContent = `Updated ${new Date().toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })}`;
 }
 
-function renderAppointmentCard(appointment, actions = []) {
-  const element = document.createElement("article");
-  element.className = "list-item";
-  element.innerHTML = `
-    <div class="list-item-header">
-      <div>
-        <div>${formatDateTime(appointment.slotISO)}</div>
-        <div class="helper-text">Patient: ${appointment.patientId}</div>
-      </div>
-      ${statusBadge(appointment.status)}
-    </div>
-    ${appointment.reason ? `<div class="helper-text">Reason: ${appointment.reason}</div>` : ""}
-    <div class="list-item-actions"></div>
+function describeAppointment(appointment) {
+  // Only display the date and time of the appointment.  We no longer show a
+  // reason code because patients do not specify problems in the simplified flow.
+  return formatDateTime(appointment.slotISO);
+}
+
+function renderActionButtons(appointment) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "doctor-actions";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.textContent = "Confirm";
+  confirmBtn.addEventListener("click", () => handleDecision(appointment, "confirm", confirmBtn));
+  wrapper.appendChild(confirmBtn);
+
+  const declineBtn = document.createElement("button");
+  declineBtn.type = "button";
+  declineBtn.className = "secondary";
+  declineBtn.textContent = "Decline";
+  declineBtn.addEventListener("click", () => handleDecision(appointment, "decline", declineBtn));
+  wrapper.appendChild(declineBtn);
+
+  return wrapper;
+}
+
+function renderAppointmentCard(appointment, includeActions = false) {
+  const card = document.createElement("article");
+  card.className = "list-card";
+  card.setAttribute("role", "listitem");
+  card.tabIndex = 0;
+
+  const header = document.createElement("div");
+  header.className = "list-card-header";
+  header.innerHTML = `
+    <h3>${appointment.patientEmail || appointment.patientId}</h3>
+    ${statusBadge(appointment.status)}
   `;
-  const actionsContainer = element.querySelector(".list-item-actions");
-  actions.forEach((action) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = action.label;
-    button.className = action.className || "secondary";
-    button.addEventListener("click", () => action.handler(appointment, button));
-    actionsContainer.appendChild(button);
-  });
-  element.addEventListener("click", (event) => {
-    if (event.target.closest("button")) {
-      return;
+  card.appendChild(header);
+
+  const details = document.createElement("p");
+  details.className = "helper-text";
+  details.textContent = describeAppointment(appointment);
+  card.appendChild(details);
+
+  const actions = document.createElement("div");
+  actions.className = "doctor-actions";
+  const viewBtn = document.createElement("button");
+  viewBtn.type = "button";
+  viewBtn.className = "secondary";
+  viewBtn.textContent = "View vitals";
+  viewBtn.addEventListener("click", () => loadPatientSummary(appointment));
+  actions.appendChild(viewBtn);
+  card.appendChild(actions);
+
+  if (includeActions) {
+    card.appendChild(renderActionButtons(appointment));
+  }
+
+  card.addEventListener("click", () => loadPatientSummary(appointment));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      loadPatientSummary(appointment);
     }
-    showHealthSummary(appointment);
   });
-  return element;
+
+  return card;
 }
 
-function renderPending(list) {
-  const container = document.querySelector("#pendingRequests");
+function renderAppointmentList(containerSelector, items, includeActions = false) {
+  const container = document.querySelector(containerSelector);
   container.innerHTML = "";
-  if (!list.length) {
-    container.innerHTML = '<div class="empty-state">No pending requests.</div>';
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "helper-text";
+    empty.textContent = "No appointments in this view.";
+    container.appendChild(empty);
     return;
   }
-  list.forEach((appointment) => {
-    const card = renderAppointmentCard(appointment, [
-      {
-        label: "Confirm",
-        className: "",
-        handler: confirmAppointment,
-      },
-      {
-        label: "Decline",
-        className: "danger",
-        handler: declineAppointment,
-      },
-    ]);
-    container.appendChild(card);
-  });
+  items.forEach((item) => container.appendChild(renderAppointmentCard(item, includeActions)));
 }
 
-function renderSchedule(list) {
-  const container = document.querySelector("#confirmedSchedule");
-  container.innerHTML = "";
-  if (!list.length) {
-    container.innerHTML = '<div class="empty-state">No confirmed appointments yet.</div>';
-    return;
-  }
-  list.forEach((appointment) => {
-    const card = renderAppointmentCard(appointment);
-    container.appendChild(card);
-  });
-}
-
-async function confirmAppointment(appointment, button) {
+async function handleDecision(appointment, action, button) {
+  const path = action === "confirm" ? "confirm" : "decline";
   try {
     await disableWhilePending(
       button,
-      fetchJSON(`/appointments/${appointment.appointmentId}/confirm`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      })
+      fetchJSON(`/appointments/${appointment.appointmentId}/${path}`, { method: "POST" })
     );
-    showToast("Appointment confirmed", "success");
-    await loadAppointments();
+    showToast(`Appointment ${action}ed`, "success");
+    await loadDoctorData();
   } catch (error) {
-    console.error(error);
-    showToast(error.message || "Unable to confirm", "error");
+    console.error(`Failed to ${action} appointment`, error);
+    showToast(error.message || `Unable to ${action} appointment`, "error");
   }
 }
 
-async function declineAppointment(appointment, button) {
-  try {
-    await disableWhilePending(
-      button,
-      fetchJSON(`/appointments/${appointment.appointmentId}/decline`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      })
-    );
-    showToast("Appointment declined", "success");
-    await loadAppointments();
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || "Unable to decline", "error");
-  }
-}
-
-async function showHealthSummary(appointment) {
-  currentAppointmentId = appointment.appointmentId;
-  const panel = document.querySelector("#healthSummary");
-  panel.innerHTML = '<div class="helper-text">Loading health summary…</div>';
-  try {
-    const data = await fetchJSON(`/patient/${appointment.patientId}/health/summary?appointmentId=${appointment.appointmentId}`, {
-      method: "GET",
-    });
-    renderHealthSummary(data.items || []);
-  } catch (error) {
-    console.error(error);
-    panel.innerHTML = `<div class="error-text">${error.message || "Unable to load health summary"}</div>`;
-  }
-}
-
-function renderHealthSummary(items) {
+function renderMetrics(metrics) {
   const panel = document.querySelector("#healthSummary");
   panel.innerHTML = "";
-  if (!items.length) {
-    panel.innerHTML = '<div class="empty-state">No health data found for this patient.</div>';
+  
+  if (!metrics) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Select an appointment to view patient vitals.";
+    panel.appendChild(empty);
     return;
   }
-  items.forEach((item) => {
-    const card = document.createElement("article");
-    card.className = "list-item";
-    card.innerHTML = `
-      <div class="list-item-header">
-        <div>Record ${item.recordId || ""}</div>
-        <div class="helper-text">Updated ${item.updatedAt ? new Date(item.updatedAt).toLocaleString() : ""}</div>
-      </div>
-      <pre class="helper-text" style="white-space: pre-wrap;">${escapeHtml(JSON.stringify(item.payload || item, null, 2))}</pre>
-    `;
-    panel.appendChild(card);
-  });
-}
-
-function escapeHtml(text) {
-  const map = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
+  
+  // Create a professional vitals grid
+  const grid = document.createElement("div");
+  grid.className = "vitals-grid";
+  
+  // Define vital labels and units for better display
+  const vitalLabels = {
+    heightCm: { label: "Height", unit: "cm" },
+    weightKg: { label: "Weight", unit: "kg" },
+    temperatureC: { label: "Temperature", unit: "°C" },
+    bmi: { label: "BMI", unit: "" },
+    bloodPressureSystolic: { label: "BP Systolic", unit: "mmHg" },
+    bloodPressureDiastolic: { label: "BP Diastolic", unit: "mmHg" },
+    heartRate: { label: "Heart Rate", unit: "bpm" },
+    respiratoryRate: { label: "Respiratory Rate", unit: "/min" },
+    oxygenSaturation: { label: "O₂ Saturation", unit: "%" },
+    glucoseLevel: { label: "Glucose", unit: "mg/dL" },
   };
-  return String(text).replace(/[&<>"']/g, (m) => map[m]);
+  
+  Object.entries(metrics).forEach(([key, value]) => {
+    const vitalInfo = vitalLabels[key] || { label: key, unit: "" };
+    
+    const card = document.createElement("div");
+    card.className = "vital-card";
+    
+    const label = document.createElement("div");
+    label.className = "vital-card-label";
+    label.textContent = vitalInfo.label;
+    
+    const valueContainer = document.createElement("div");
+    valueContainer.style.display = "flex";
+    valueContainer.style.alignItems = "baseline";
+    valueContainer.style.gap = "4px";
+    
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "vital-card-value";
+    valueSpan.textContent = typeof value === 'number' ? value.toFixed(1) : value;
+    
+    const unitSpan = document.createElement("span");
+    unitSpan.className = "vital-card-unit";
+    unitSpan.textContent = vitalInfo.unit;
+    
+    valueContainer.appendChild(valueSpan);
+    if (vitalInfo.unit) {
+      valueContainer.appendChild(unitSpan);
+    }
+    
+    card.appendChild(label);
+    card.appendChild(valueContainer);
+    grid.appendChild(card);
+  });
+  
+  panel.appendChild(grid);
 }
 
-async function loadAppointments() {
-  const pendingContainer = document.querySelector("#pendingRequests");
-  pendingContainer.innerHTML = '<div class="helper-text">Refreshing…</div>';
+async function loadPatientSummary(appointment) {
+  state.selected = appointment;
   try {
-    const { items = [] } = await fetchJSON("/appointments/doctor", { method: "GET" });
-    const { pending, confirmed } = splitAppointments(items);
-    renderPending(pending);
-    renderSchedule(confirmed);
-    if (currentAppointmentId) {
-      const current = items.find((item) => item.appointmentId === currentAppointmentId);
-      if (current) {
-        await showHealthSummary(current);
-      }
-    }
+    const response = await fetchJSON(
+      `/patient-health/${appointment.patientId}/latest?appointmentId=${appointment.appointmentId}`
+    );
+    const metrics = response.item?.metrics || response.item?.summary || null;
+    renderMetrics(metrics);
   } catch (error) {
-    console.error(error);
-    pendingContainer.innerHTML = `<div class="error-text">${error.message || "Unable to load appointments"}</div>`;
+    console.error("Failed to load patient summary", error);
+    showToast(error.message || "Unable to load vitals", "error");
+    renderMetrics(null);
+  }
+}
+
+async function loadDoctorData() {
+  try {
+    const pendingResp = await fetchJSON("/appointments/doctor?status=PENDING");
+    const confirmedResp = await fetchJSON("/appointments/doctor?status=CONFIRMED");
+    state.pending = pendingResp.items || [];
+    state.confirmed = confirmedResp.items || [];
+    renderAppointmentList("#pendingRequests", state.pending, true);
+    renderAppointmentList("#confirmedSchedule", state.confirmed, false);
+    updateLastUpdated();
+  } catch (error) {
+    console.error("Failed to load doctor data", error);
+    showToast(error.message || "Unable to load appointments", "error");
   }
 }
 
 function startPolling() {
-  if (pollHandle) {
-    clearInterval(pollHandle);
+  if (state.pollHandle) {
+    clearInterval(state.pollHandle);
   }
-  pollHandle = setInterval(loadAppointments, 10000);
+  state.pollHandle = setInterval(loadDoctorData, 10000);
 }
 
-async function initDoctorPage() {
+function setupTabs() {
+  const tabPending = document.querySelector("#tabPending");
+  const tabSchedule = document.querySelector("#tabSchedule");
+  const panelPending = document.querySelector("#pendingPanel");
+  const panelSchedule = document.querySelector("#schedulePanel");
+
+  function activate(tab) {
+    const showPending = tab === "pending";
+    tabPending.classList.toggle("active", showPending);
+    tabSchedule.classList.toggle("active", !showPending);
+    tabPending.setAttribute("aria-selected", showPending ? "true" : "false");
+    tabSchedule.setAttribute("aria-selected", showPending ? "false" : "true");
+    panelPending.hidden = !showPending;
+    panelSchedule.hidden = showPending;
+  }
+
+  tabPending.addEventListener("click", () => activate("pending"));
+  tabSchedule.addEventListener("click", () => activate("schedule"));
+}
+
+async function init() {
   await loadConfig();
   if (!requireRole(["DOCTOR"])) return;
-  document.querySelector("#userEmail").textContent = getUserEmail();
+
+  const session = getSession();
+  const name = [session.given_name, session.family_name].filter(Boolean).join(" ") || "Doctor";
+  document.querySelector("#userName").textContent = name;
+  document.querySelector("#userEmail").textContent = session.email;
   bindSignOut(document.querySelector("#signOutBtn"));
-  await loadAppointments();
+  setupTabs();
+  renderMetrics(null);
+
+  await loadDoctorData();
   startPolling();
 }
 
-window.addEventListener("DOMContentLoaded", initDoctorPage);
+window.addEventListener("DOMContentLoaded", init);

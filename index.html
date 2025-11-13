@@ -3,40 +3,61 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Health Management Portal</title>
+    <title>Health Management Platform - Home</title>
     <link rel="stylesheet" href="./assets/styles.css" />
   </head>
   <body>
+    <div class="demo-badge"></div>
     <main>
       <section class="card" aria-labelledby="welcomeTitle">
-        <h1 id="welcomeTitle">Health Management Portal</h1>
-        <p class="text-muted">
-          Coordinate patient care, book appointments, and review health summaries securely with role-aware access.
+        <h1 id="welcomeTitle">🏥 Health Management Platform</h1>
+        <p class="text-muted" style="font-size: 1.1rem; margin-top: 8px;">
+          Modern healthcare coordination platform for patients and providers. Book appointments, review health summaries, and access secure medical information.
         </p>
-        <div class="section" id="authState" hidden>
-          <h2>Welcome back</h2>
-          <p class="helper-text">You are signed in as <span id="sessionEmail"></span> (<span id="sessionRole"></span>).</p>
-          <div class="layout-grid two-col">
+        
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">❤️</div>
+            <h3>Patient Care</h3>
+            <p class="helper-text">Book appointments, track vitals, and manage your health journey.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🩺</div>
+            <h3>Doctor Portal</h3>
+            <p class="helper-text">Review patient requests, confirm appointments, and access medical records.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔒</div>
+            <h3>Secure & Private</h3>
+            <p class="helper-text">Role-based access with enterprise-grade security and HIPAA compliance.</p>
+          </div>
+        </div>
+        
+        <div class="section" id="authState" hidden style="margin-top: 32px;">
+          <h2>Welcome back! 👋</h2>
+          <p class="helper-text">Signed in as <strong id="sessionEmail"></strong> (<span id="sessionRole"></span>)</p>
+          <div class="layout-grid two-col" style="margin-top: 20px;">
             <a class="button-link" href="./patient.html" id="patientEntry" hidden>
-              <button type="button">Go to Patient Workspace</button>
+              <button type="button">❤️ Go to Patient Portal</button>
             </a>
             <a class="button-link" href="./doctor.html" id="doctorEntry" hidden>
-              <button type="button">Go to Doctor Workspace</button>
+              <button type="button">🩺 Go to Doctor Portal</button>
             </a>
             <button type="button" class="secondary" id="signOutBtn">Sign out</button>
           </div>
         </div>
-        <div class="section" id="guestState">
-          <h2>Get started</h2>
+        
+        <div class="section" id="guestState" style="margin-top: 32px;">
+          <h2>Get Started Today</h2>
           <p class="helper-text">
-            Create an account or sign in with your Cognito credentials to access the patient or doctor dashboards.
+            Create an account or sign in to access your patient dashboard or doctor workspace.
           </p>
-          <div class="layout-grid two-col">
+          <div class="layout-grid two-col" style="margin-top: 20px;">
             <a class="button-link" href="./signup.html">
-              <button type="button">Sign up</button>
+              <button type="button">✨ Create Account</button>
             </a>
             <a class="button-link" href="./signin.html">
-              <button type="button" class="secondary">Sign in</button>
+              <button type="button" class="secondary">🔑 Sign In</button>
             </a>
           </div>
         </div>
