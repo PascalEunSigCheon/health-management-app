@@ -209,12 +209,23 @@ export async function signUpUser(form) {
       attributeList.push(new cognito.CognitoUserAttribute({ Name: "custom:location", Value: profile.city }));
     }
     // Omit custom:languages attribute entirely.
-    attributeList.push(
-      new cognito.CognitoUserAttribute({
-        Name: "custom:availability",
-        Value: JSON.stringify(profile.availSlots),
-      })
-    );
+    // Avoid storing large JSON in Cognito custom attributes. Pass availability
+    // via clientMetadata to the post-confirmation Lambda (it reads
+    // `clientMetadata.doctorSlots`) which then saves the schedule to DynamoDB.
+    // This keeps the Cognito attribute schema simple and avoids type errors.
+    // We'll build a clientMetadata object below and pass it to `pool.signUp`.
+    // (Do not push custom:availability as a Cognito attribute.)
+    // attributeList.push(
+    //   new cognito.CognitoUserAttribute({
+    //     Name: "custom:availability",
+    //     Value: JSON.stringify(profile.availSlots),
+    //   })
+    // );
+    var signupClientMetadata = {
+      doctorSlots: JSON.stringify(profile.availSlots || []),
+      doctorSpecialty: profile.specialty || "",
+      doctorCity: profile.city || "",
+    };
   }
 
   return new Promise((resolve, reject) => {
@@ -230,7 +241,9 @@ export async function signUpUser(form) {
           resolve(result);
         }
       },
-      null
+      // pass clientMetadata so the post-confirmation Lambda can read
+      // `doctorSlots` and persist availability to DynamoDB
+      signupClientMetadata
     );
   });
 }
